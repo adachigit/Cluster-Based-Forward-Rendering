@@ -1,0 +1,36 @@
+#pragma kernel CSMain
+#pragma kernel InOutTestMain
+
+float4x4 inMatrix;
+
+uint3 ClusterCB_GridDim;      // x, y, z 分别保存视锥体在x, y, z三个方向上被切分的个数，也就是各个分量上的子椎体个数
+float ClusterCB_ViewNear;     // The distance to the near clipping plane. (Used for computing the index in the cluster grid)
+uint2 ClusterCB_Size;         // 屏幕空间内以像素为单位的子椎体宽高
+float ClusterCB_NearK;        // ( 1 + ( 2 * tan( fov * 0.5 ) / ClusterGridDim.y ) ) // Used to compute the near plane for clusters at depth k.
+float ClusterCB_LogGridDimY;  // 1.0f / log( 1 + ( 2 * tan( fov * 0.5 ) / ClusterGridDim.y )
+float4 ClusterCB_ScreenDimensions;
+
+StructuredBuffer<uint> uintInputBuf;
+RWStructuredBuffer<uint> uintOutputBuf;
+
+struct OutStruct
+{
+    float4 f;
+};
+
+RWStructuredBuffer<OutStruct> output;
+
+[numthreads(1, 1, 1)]
+void CSMain()
+{
+    output[0].f.x = inMatrix[0][0];
+    output[0].f.y = inMatrix[1][1];
+    output[0].f.z = inMatrix[2][2];
+    output[0].f.w = inMatrix[3][3];
+}
+
+[numthreads(1, 1, 1)]
+void InOutTestMain()
+{
+    uintOutputBuf[0] = uintInputBuf[0];
+}

@@ -1,0 +1,67 @@
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+
+public class LightsManager : MonoBehaviour
+{
+    public GameObject m_LightsGroupObject;
+    public InputField m_LightsCountInput;
+    public Camera m_Camera;
+
+    private float MinZ;
+    private float MaxZ;
+    private float MinY;
+    private float MaxY;
+    private float MinX;
+    private float MaxX;
+
+    /// <summary>
+    /// Start is called on the frame when a script is enabled just before
+    /// any of the Update methods is called the first time.
+    /// </summary>
+    void Start()
+    {
+        MinZ = m_Camera.nearClipPlane;
+        MaxZ = m_Camera.farClipPlane;
+
+        MinY = m_Camera.nearClipPlane * Mathf.Tan(m_Camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
+        MaxY = m_Camera.farClipPlane * Mathf.Tan(m_Camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
+
+        MinX = m_Camera.aspect * MinY;
+        MaxX = m_Camera.aspect * MaxY;
+    }
+
+    public void CreateLights()
+    {
+        for(int i = 0; i < m_LightsGroupObject.transform.childCount; ++i)
+        {
+            Destroy(m_LightsGroupObject.transform.GetChild(i).gameObject);
+        }
+
+        float x = 0.0f;
+        float y = 0.0f;
+        float z = 0.0f;
+        float signX = 0.0f;
+        float signY = 0.0f;
+
+        int lightCounts = m_LightsCountInput.text.Length <= 0 ? 0 : int.Parse(m_LightsCountInput.text);
+
+        for(int i = 0; i < lightCounts; ++i)
+        {
+            x = Random.Range(MinX, MaxX);
+            y = Random.Range(MinY, MaxY);
+            z = Random.Range(MinZ, MaxZ);
+            signX = Random.Range(-1.0f, 1.0f);
+            signY = Random.Range(-1.0f, 1.0f);
+
+            GameObject go = new GameObject();
+            go.transform.position = m_Camera.transform.localToWorldMatrix * new Vector3(x * signX, y * signY, z);
+            Light l = go.AddComponent<Light>();
+            l.type = LightType.Point;
+            l.range = Random.Range(5.0f, 10.0f);
+
+            go.transform.parent = m_LightsGroupObject.transform;
+        }
+    }
+}

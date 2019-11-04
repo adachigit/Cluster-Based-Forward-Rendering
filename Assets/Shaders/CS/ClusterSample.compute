@@ -1,0 +1,26 @@
+#pragma kernel CSMain
+
+#include "UnityCG.cginc"
+#include "../Common/Common.hlsl"
+
+Texture2D<float4> _DepthTexture;
+RWStructuredBuffer<float> RWClusterFlags;
+
+[numthreads(32, 32, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    float2 texCoord = id.xy;
+    float fDepth = Linear01Depth(_DepthTexture[id.xy].r);
+
+    if(fDepth > 0.0f)
+    {
+        float4 viewPos = ScreenToView(float4(texCoord, fDepth, 1));
+        viewPos.z *= -1;
+
+        uint3 clusterIndex3D = ComputeClusterIndex3D(texCoord, viewPos.z);
+        uint clusterIndex1D = ComputeClusterIndex1D(clusterIndex3D);
+
+        RWClusterFlags[clusterIndex1D] = fDepth;//1.0f;
+        return;
+    }
+}

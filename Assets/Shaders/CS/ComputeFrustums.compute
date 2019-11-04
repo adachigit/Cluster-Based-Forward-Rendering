@@ -1,0 +1,56 @@
+#pragma kernel CSMain
+#pragma enable_d3d11_debug_symbols
+
+#include "../Common/Common.hlsl"
+
+#ifndef BLOCK_SIZE
+#define BLOCK_SIZE 512
+#endif
+
+RWStructuredBuffer<AABB> RWClusterAABBs;
+
+struct ComputeShaderInput
+{
+    uint3 GroupID           : SV_GroupID;
+    uint3 GroupThreadID     : SV_GroupThreadID;
+    uint3 DispatchThreadID  : SV_DispatchThreadID;
+    uint  GroupIndex        : SV_GroupIndex;
+};
+
+[numthreads(BLOCK_SIZE, 1, 1)]
+void CSMain(ComputeShaderInput cs_IDs)
+{
+    //使用全局ThreadID作为cluster索引
+    uint clusterIndex1D = cs_IDs.DispatchThreadID.x;
+    //将一维索引转化为三维索引
+    uint3 clusterIndex3D = ComputeClusterIndex3D(clusterIndex1D);
+    //生成cluster在Z轴方向上的前后平面
+    Plane nearPlane = { 0.0f, 0.0f, 1.0f, ClusterCB_ViewNear * pow(abs(ClusterCB_NearK), clusterIndex3D.z) };
+    Plane farPlane = { 0.0f, 0.0f, 1.0f, ClusterCB_ViewNear * pow(abs(ClusterCB_NearK), clusterIndex3D.z + 1) };
+    //基于OpenGL屏幕坐标系，左下角为(0, 0)，右上角为(pixelWidth, pixelHeight)
+    //pMin和pMax对应屏幕空间下的cluster左下角和右上角
+    float4 pMin = float4(clusterIndex3D.xy * ClusterCB_Size.xy, 0.0f, 1.0f);
+    float4 pMax = float4((clusterIndex3D.xy + 1) * ClusterCB_Size.xy, 0.0f, 1.0f);
+
+    pMin = ScreenToView(pMin);
+    pMax = ScreenToView(pMax);
+
+    // right-handed coordinate system
+    pMin.z *= -1;
+    pMax.z *= -1;
+
+    //从视空间原点向pMin和pMax发出两条射线，分别找到与cluster远近平面的一共四个交点
+    float3 nearMin, nearMax, farMin, farMax;
+    float3 eye = float3(0.0f, 0.0f, 0.0f);
+    IntersectLinePlane(eye, (float3)pMin, nearPlane, nearMin);
+    IntersectLinePlane(eye, (float3)pMax, nearPlane, nearMax);
+    IntersectLinePlane(eye, (float3)pMin, farPlane, farMin);
+    IntersectLinePlane(eye, (float3)pMax, farPlane, farMax);
+    //获得这四个交点的最小值和最大值
+    float3 aabbMin = min(nearMin, min(nearMax, min(farMin, farMax)));
+    float3 aabbMax = max(nearMin, max(nearMax, max(farMin, farMax)));
+
+    AABB aabb = { float4(aabbMin, 1.0f), float4(aabbMax, 1.0f) };
+
+    RWClusterAABBs[clusterIndex1D] = aabb;
+}

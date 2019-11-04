@@ -1,0 +1,127 @@
+#pragma kernel CSMain
+
+#include "../Common/Common.hlsl"
+
+#define LIGHT_TYPE_DIRECTION    1
+#define LIGHT_TYPE_POINT        2
+#define LIGHT_TYPE_SPOT         3
+
+struct Light
+{
+    float4 worldSpacePos;
+    float4 viewSpacePos;
+    float4 worldSpaceDir;
+    float4 viewSpaceDir;
+    float4 color;
+    float spotLightAngle;
+    float range;
+    float intensity;
+    uint type;
+};
+
+RWStructuredBuffer<uint> RWLightIndexCounter_Cluster;
+RWStructuredBuffer<uint2> RWLightGrid_Cluster;
+RWStructuredBuffer<uint> RWLightIndexList_Cluster;
+
+StructuredBuffer<AABB> ClusterAABBs;
+StructuredBuffer<Light> ActiveLights;
+
+uint ActiveLightCount;
+
+groupshared uint gs_ClusterIndex1D;
+groupshared AABB gs_ClusterAABB;
+groupshared uint gs_LightCount;
+groupshared uint gs_LightStartOffset;
+groupshared uint gs_LightList[256];
+groupshared Plane gs_ClusterBoxPlanes[6];
+
+struct ComputeShaderInput
+{
+    uint3 GroupID           : SV_GroupID;
+    uint3 GroupThreadID     : SV_GroupThreadID;
+    uint3 DispatchThreadID  : SV_DispatchThreadID;
+    uint  GroupIndex        : SV_GroupIndex;
+};
+
+#define AppendLight(lightIndex, counter, lightList) \
+    InterlockedAdd(counter, 1, index);  \
+    if(index < 256) \
+    {   \
+        lightList[index] = lightIndex;  \
+    }
+
+#define NUM_THREADS         128
+
+[numthreads(NUM_THREADS, 1, 1)]
+void CSMain(ComputeShaderInput IN)
+{
+    uint i, index;
+
+    if(IN.GroupIndex == 0)
+    {
+        gs_LightCount = 0;
+
+        gs_ClusterIndex1D = IN.GroupID.x;
+        gs_ClusterAABB = ClusterAABBs[gs_ClusterIndex1D];
+
+        float4 Min = gs_ClusterAABB.Min;
+        float4 Max = gs_ClusterAABB.Max;
+        
+        // Near plane
+        gs_ClusterBoxPlanes[0] = BuildPlane(float3(Min.x, Min.y, Min.z), float3(Max.x, Max.y, Min.z), float3(Max.x, Min.y, Min.z));
+        // Far plane
+        gs_ClusterBoxPlanes[1] = BuildPlane(float3(Min.x, Min.y, Max.z), float3(Max.x, Min.y, Max.z), float3(Max.x, Max.y, Max.z));
+        // Top plane
+        gs_ClusterBoxPlanes[2] = BuildPlane(float3(Min.x, Max.y, Min.z), float3(Max.x, Max.y, Max.z), float3(Max.x, Max.y, Min.z));
+        // Bottom plane
+        gs_ClusterBoxPlanes[3] = BuildPlane(float3(Min.x, Min.y, Min.z), float3(Max.x, Min.y, Min.z), float3(Max.x, Min.y, Max.z));
+        // Left plane
+        gs_ClusterBoxPlanes[4] = BuildPlane(float3(Min.x, Min.y, Min.z), float3(Min.x, Max.y, Max.z), float3(Min.x, Max.y, Min.z));
+        // Right plane
+        gs_ClusterBoxPlanes[5] = BuildPlane(float3(Max.x, Min.y, Min.z), float3(Max.x, Max.y, Max.z), float3(Max.x, Min.y, Max.z));
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    for(i = IN.GroupIndex; i < ActiveLightCount; i += NUM_THREADS)
+    {
+        Light light = ActiveLights[i];
+        if(light.type == LIGHT_TYPE_POINT)
+        {
+            float3 pos = light.viewSpacePos.xyz;
+
+            if(SphereInsideAABB(pos, light.range, gs_ClusterAABB))
+            {
+                AppendLight(i, gs_LightCount, gs_LightList);
+            }
+        }
+        else if(light.type == LIGHT_TYPE_SPOT)
+        {
+            Cone cone = { light.viewSpacePos.xyz, light.range, light.viewSpaceDir.xyz, light.range * tan(radians(light.spotLightAngle * 0.5f)) };
+
+            if(ConeInsideBoxPlanes(cone, gs_ClusterBoxPlanes))
+            {
+                AppendLight(i, gs_LightCount, gs_LightList);
+            }
+        }
+        else if(light.type == LIGHT_TYPE_DIRECTION)
+        {
+            AppendLight(i, gs_LightCount, gs_LightList);
+        }
+    }
+    
+    GroupMemoryBarrierWithGroupSync();
+
+    if(IN.GroupIndex == 0)
+    {
+        InterlockedAdd(RWLightIndexCounter_Cluster[0], gs_LightCount, gs_LightStartOffset);
+        RWLightGrid_Cluster[gs_ClusterIndex1D] = uint2(gs_LightStartOffset, gs_LightCount);
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    for(i = IN.GroupIndex; i < gs_LightCount; i += NUM_THREADS)
+    {
+        RWLightIndexList_Cluster[gs_LightStartOffset + i] = gs_LightList[i];
+    }
+}
