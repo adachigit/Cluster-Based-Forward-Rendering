@@ -5,8 +5,6 @@ namespace MyRenderPipeline
     public class ForwardPlusCameraData : MonoBehaviour
     {
         [SerializeField]
-        public int m_ClusterBlockGridSize;
-        [SerializeField]
         public int m_MaxLightsCount;
         [SerializeField]
         public int m_MaxLightsCountPerCluster;

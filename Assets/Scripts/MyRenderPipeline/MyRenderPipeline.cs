@@ -7,6 +7,11 @@ namespace MyRenderPipeline
 {
     public class MyRenderPipeline : RenderPipeline
     {
+        public enum RendererType
+        {
+            ForwardPlus,
+        }
+
         IPipelineRenderer _renderer;
         IDictionary<Camera, IPipelineRenderer> cameraRendererDic = new Dictionary<Camera, IPipelineRenderer>();
 
