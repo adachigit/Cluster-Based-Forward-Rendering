@@ -8,7 +8,7 @@
     {
         Pass
         {
-            Tags { "LightMode" = "ShadowCaster" }
+            Tags { "LightMode" = "DepthOnly" }
 
             CGPROGRAM
 
@@ -46,7 +46,7 @@
 
         Pass
         {
-            Tags { "RenderType"="Opaque" }
+            Tags { "RenderType"="SRPDefaultUnlit" }
 
             CGPROGRAM
             #pragma vertex vert
@@ -86,7 +86,7 @@
                 // sample the texture
                 fixed4 col = tex2D(_MainTex, i.uv);
                 // apply fog
-                UNITY_APPLY_FOG(i.fogCoord, col);
+//                UNITY_APPLY_FOG(i.fogCoord, col);
                 return col;
             }
             ENDCG

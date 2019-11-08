@@ -262,13 +262,13 @@ public class Script_ClusterBasedLighting : MonoBehaviour
 
     void OnRenderImage(RenderTexture sourceTexture, RenderTexture destTexture)
     {
-        Graphics.SetRenderTarget(_rtColor.colorBuffer, _rtDepth.depthBuffer);
+//        Graphics.SetRenderTarget(_rtColor.colorBuffer, _rtDepth.depthBuffer);
 
-        GL.Clear(true, true, Color.gray);
+//        GL.Clear(true, true, Color.gray);
 
-        Pass_DepthPre();
+//        Pass_DepthPre();
 
-        Graphics.Blit(_rtColor, destTexture);
+//        Graphics.Blit(_rtColor, destTexture);
     }
 
     void CalculateMDim(Camera cam)
