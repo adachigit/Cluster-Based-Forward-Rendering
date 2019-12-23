@@ -25,24 +25,18 @@ namespace MyRenderPipeline
 
         #endregion
         
-        private class CameraRendererData
-        {
-            public int m_ClusterBlockGridSize;
-            public float m_ClusterFarPlane;
-            public int m_MaxLightsCount;
-            public int m_MaxLightsCountPerCluster;
-            public ComputeShader cs_ComputeClusterAABB;
-            public ComputeShader cs_AssignLightsToCluster;
-            public ComputeShader cs_ClusterSample;
-        }
-
-        CameraRendererData _cameraData;
+        private float clusterFarPlane;
+        private float fov;
+        private float cullFarPlane;
+        private int maxLightsCount;
+        private int maxLightsCountPerCluster;
+        private bool debug;
 
         public void Setup(ScriptableRenderContext context, Camera camera)
         {
             if(camera.TryGetComponent<ForwardPlusCameraData>(out ForwardPlusCameraData data))
             {
-                InitRendererByCameraData(data);
+                InitRendererByCameraData(context, camera);
             }
             else
             {
@@ -53,20 +47,31 @@ namespace MyRenderPipeline
                 else
                 {
                     Debug.LogWarning($"Unsupported camera({camera.name}) with camera type '{camera.cameraType}'.");
-                    _cameraData = null;
                 }
             }
         }
 
-        private void InitRendererByCameraData(ForwardPlusCameraData data)
+        private void InitRendererByCameraData(ScriptableRenderContext context, Camera camera)
         {
-            _cameraData = new CameraRendererData();
-            _cameraData.m_ClusterBlockGridSize = data.m_ClusterBlockGridSize;
-            _cameraData.m_MaxLightsCount = data.m_MaxLightsCount;
-            _cameraData.m_MaxLightsCountPerCluster = data.m_MaxLightsCountPerCluster;
-            _cameraData.cs_ComputeClusterAABB = data.cs_ComputeClusterAABB;
-            _cameraData.cs_AssignLightsToCluster = data.cs_AssignLightsToCluster;
-            _cameraData.cs_ClusterSample = data.cs_ClusterSample;
+            MyRenderPipelineAsset pipelineAsset = GraphicsSettings.renderPipelineAsset as MyRenderPipelineAsset;
+            ForwardPlusRendererData rendererData = pipelineAsset.GetRendererData<ForwardPlusRendererData>(MyRenderPipeline.RendererType.ForwardPlus);
+
+            ForwardPlusCameraData cameraData = camera.GetComponent<ForwardPlusCameraData>();
+            if(cameraData != null)
+            {
+                cullFarPlane = (cameraData.cullFarPlane > rendererData.clusterFarPlane) ? rendererData.clusterFarPlane : cameraData.cullFarPlane;
+                maxLightsCount = cameraData.maxLightsCount;
+                maxLightsCountPerCluster = cameraData.maxLightsCountPerCluster;
+                debug = (camera.cameraType == CameraType.Game) ? cameraData.debug : false;
+            }
+            else
+            {
+                cullFarPlane = rendererData.defaultCullFarPlane;
+                maxLightsCount = rendererData.defaultMaxLightsCount;
+                maxLightsCountPerCluster = rendererData.defaultMaxLightsCountPerCluster;
+            }
+
+            fov = (camera.cameraType == CameraType.Game) ? camera.fieldOfView : rendererData.defaultFov;
 
             InitClusters();
         }
@@ -78,8 +83,6 @@ namespace MyRenderPipeline
 
         public void Render(ScriptableRenderContext context, Camera camera)
         {
-            if(null == _cameraData) return;
-
             _context = context;
             _camera = camera;
 
@@ -118,18 +121,19 @@ namespace MyRenderPipeline
         // 渲染物体
         void DrawVisibleGeometry()
         {
+            //draw opaque geometry
             var sortingSettings = new SortingSettings(_camera);
             var drawSettings = new DrawingSettings(unlitShaderTagId, sortingSettings);
             var filteringSettings = new FilteringSettings(RenderQueueRange.opaque);
-            //draw opaque geometry
             _context.DrawRenderers(cullingResults, ref drawSettings, ref filteringSettings);
+            
             //draw skybox
             _context.DrawSkybox(_camera);
+            
             //draw transparency geometry
             sortingSettings.criteria = SortingCriteria.CommonTransparent;
             drawSettings.sortingSettings = sortingSettings;
             filteringSettings.renderQueueRange = RenderQueueRange.transparent;
-
             _context.DrawRenderers(cullingResults, ref drawSettings, ref filteringSettings);
         }
 

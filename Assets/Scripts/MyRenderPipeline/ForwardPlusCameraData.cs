@@ -5,15 +5,12 @@ namespace MyRenderPipeline
     public class ForwardPlusCameraData : MonoBehaviour
     {
         [SerializeField]
-        public int m_MaxLightsCount;
+        public float cullFarPlane;
         [SerializeField]
-        public int m_MaxLightsCountPerCluster;
+        public int maxLightsCount;
         [SerializeField]
-        public ComputeShader cs_ComputeClusterAABB;
+        public int maxLightsCountPerCluster;
         [SerializeField]
-        public ComputeShader cs_AssignLightsToCluster;
-        [SerializeField]
-        public ComputeShader cs_ClusterSample;
-
+        public bool debug;
     }
 }

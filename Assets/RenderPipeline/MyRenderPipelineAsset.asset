@@ -12,3 +12,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ca5e1c87e2bfa44c9a7ef0445e45406b, type: 3}
   m_Name: MyRenderPipelineAsset
   m_EditorClassIdentifier: 
+  rendererDataInfos:
+  - rendererType: 0
+    rendererData: {fileID: 11400000, guid: 1ae3309ae855f4779a7496ef788a2cc0, type: 2}
