@@ -34,6 +34,7 @@ namespace MyRenderPipeline
         #region For Editor Partial Methods
         partial void PrepareForSceneWindow();
         partial void DrawGizmos();
+        partial void TransformClusterGizmoInfos();
         #endregion
 
         private struct AABB
@@ -69,6 +70,8 @@ namespace MyRenderPipeline
         private bool debug;
 
         private Cluster_Dimension_Info clusterDimensionInfo;
+
+        private AABB[] clusterAABBsData;
         // for compute shader
         private ComputeBuffer cbClusterAABBs;
         
@@ -119,6 +122,7 @@ namespace MyRenderPipeline
             // Create AABBs compute buffer
             cbClusterAABBs = new ComputeBuffer(clusterDimensionInfo.clusterDimXYZ, Marshal.SizeOf<AABB>());
             rendererData.clusterAABBComputerShader.SetBuffer(kernel, ShaderPropId_ClusterAABBs, cbClusterAABBs);
+            clusterAABBsData = new AABB[clusterDimensionInfo.clusterDimXYZ];
         }
 
         private void ReleaseComputeBuffers()
@@ -175,6 +179,9 @@ namespace MyRenderPipeline
 
             int kernel = rendererData.clusterAABBComputerShader.FindKernel("CSMain");
             rendererData.clusterAABBComputerShader.Dispatch(kernel, threadsGroup, 1, 1);
+            
+            cbClusterAABBs.GetData(clusterAABBsData);
+            TransformClusterGizmoInfos();
         }
         
         public void Render(ScriptableRenderContext context, Camera camera, Camera lastRenderCamera)
