@@ -12,16 +12,16 @@ namespace MyRenderPipeline
         {
             if(Handles.ShouldRenderGizmos())
             {
-                _context.DrawGizmos(_camera, GizmoSubset.PreImageEffects);
-                _context.DrawGizmos(_camera, GizmoSubset.PostImageEffects);
+                context.DrawGizmos(camera, GizmoSubset.PreImageEffects);
+                context.DrawGizmos(camera, GizmoSubset.PostImageEffects);
             }
         }
 
         partial void PrepareForSceneWindow()
         {
-            if(_camera.cameraType == CameraType.SceneView)
+            if(camera.cameraType == CameraType.SceneView)
             {
-                ScriptableRenderContext.EmitWorldGeometryForSceneView(_camera);
+                ScriptableRenderContext.EmitWorldGeometryForSceneView(camera);
             }
         }
 #endif

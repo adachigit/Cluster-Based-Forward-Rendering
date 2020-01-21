@@ -7,6 +7,8 @@ namespace MyRenderPipeline
         [SerializeField]
         public float cullFarPlane;
         [SerializeField]
+        public int clusterGridBlockSize;
+        [SerializeField]
         public int maxLightsCount;
         [SerializeField]
         public int maxLightsCountPerCluster;

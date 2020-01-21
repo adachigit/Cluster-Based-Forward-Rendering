@@ -1,3 +1,5 @@
+using System;
+using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -5,86 +7,180 @@ namespace MyRenderPipeline
 {
     public partial class ForwardPlusRenderer : IPipelineRenderer
     {
-        ScriptableRenderContext _context;
-        Camera _camera;
+        ScriptableRenderContext context;
+        Camera camera;
+        private ForwardPlusRendererData rendererData;
 
-        const string bufferName = "Forward+ Render";
+        const string CMB_BUFFER_NAME = "Forward+ Render";
 
         static ShaderTagId unlitShaderTagId = new ShaderTagId("SRPDefaultUnlit");
+        
+        private static readonly int ShaderPropId_GridDim = Shader.PropertyToID("ClusterCB_GridDim");
+        private static readonly int ShaderPropId_ViewNear = Shader.PropertyToID("ClusterCB_ViewNear");
+        private static readonly int ShaderPropId_GridSize = Shader.PropertyToID("ClusterCB_Size");
+        private static readonly int ShaderPropId_NearKRatio = Shader.PropertyToID("ClusterCB_NearK");
+        private static readonly int ShaderPropId_LogGridDimY = Shader.PropertyToID("ClusterCB_LogGridDimY");
+        private static readonly int ShaderPropId_ScreenDimension = Shader.PropertyToID("ClusterCB_ScreenDimensions");
+        private static readonly int ShaderPropId_InverseProjMatrix = Shader.PropertyToID("_InverseProjectionMatrix");
 
-        CommandBuffer _buffer = new CommandBuffer() {
-            name = bufferName
+        private static readonly int ShaderPropId_ClusterAABBs = Shader.PropertyToID("RWClusterAABBs");
+        
+        CommandBuffer cmdBuffer = new CommandBuffer() {
+            name = CMB_BUFFER_NAME
         };
 
         CullingResults cullingResults;
 
         #region For Editor Partial Methods
-
         partial void PrepareForSceneWindow();
         partial void DrawGizmos();
-
         #endregion
+
+        private struct AABB
+        {
+            public Vector4 Min;
+            public Vector4 Max;
+        }
         
-        private float clusterFarPlane;
-        private float fov;
-        private float cullFarPlane;
+        struct Cluster_Dimension_Info
+        {
+            public float halfFOVRadian;
+            public float zNear;
+            public float zFar;
+
+            public float tanHalfFOVDivDimY;
+            public float logDimY;
+            public float logDepth;
+
+            public int clusterDimX;
+            public int clusterDimY;
+            public int clusterDimZ;
+            public int clusterDimXYZ;
+        };
+
+        private int clusterGridBlockSize;
+        private Vector4 screenDimension;
+        private Matrix4x4 inverseProjMatrix;
+        
         private int maxLightsCount;
         private int maxLightsCountPerCluster;
+        
+        private CameraType cameraType;
         private bool debug;
 
+        private Cluster_Dimension_Info clusterDimensionInfo;
+        // for compute shader
+        private ComputeBuffer cbClusterAABBs;
+        
         public void Setup(ScriptableRenderContext context, Camera camera)
         {
-            if(camera.TryGetComponent<ForwardPlusCameraData>(out ForwardPlusCameraData data))
-            {
-                InitRendererByCameraData(context, camera);
-            }
-            else
-            {
-                if(camera.cameraType == CameraType.SceneView || camera.cameraType == CameraType.Preview || camera.cameraType == CameraType.Reflection)
-                {
-                    ForwardPlusCameraData defaultData = new ForwardPlusCameraData();
-                }
-                else
-                {
-                    Debug.LogWarning($"Unsupported camera({camera.name}) with camera type '{camera.cameraType}'.");
-                }
-            }
+            InitRendererByCamera(context, camera);
         }
 
-        private void InitRendererByCameraData(ScriptableRenderContext context, Camera camera)
+        private void InitRendererByCamera(ScriptableRenderContext context, Camera camera)
         {
             MyRenderPipelineAsset pipelineAsset = GraphicsSettings.renderPipelineAsset as MyRenderPipelineAsset;
-            ForwardPlusRendererData rendererData = pipelineAsset.GetRendererData<ForwardPlusRendererData>(MyRenderPipeline.RendererType.ForwardPlus);
+            rendererData = pipelineAsset.GetRendererData<ForwardPlusRendererData>(MyRenderPipeline.RendererType.ForwardPlus);
 
             ForwardPlusCameraData cameraData = camera.GetComponent<ForwardPlusCameraData>();
             if(cameraData != null)
             {
-                cullFarPlane = (cameraData.cullFarPlane > rendererData.clusterFarPlane) ? rendererData.clusterFarPlane : cameraData.cullFarPlane;
-                maxLightsCount = cameraData.maxLightsCount;
-                maxLightsCountPerCluster = cameraData.maxLightsCountPerCluster;
-                debug = (camera.cameraType == CameraType.Game) ? cameraData.debug : false;
+                clusterDimensionInfo.zFar = (cameraData.cullFarPlane > rendererData.clusterFarPlane) ? rendererData.clusterFarPlane : cameraData.cullFarPlane;
+                clusterGridBlockSize = cameraData.clusterGridBlockSize > 0 ? cameraData.clusterGridBlockSize : rendererData.clusterBlockGridSize;
+                maxLightsCount = cameraData.maxLightsCount > 0 ? cameraData.maxLightsCount : rendererData.defaultMaxLightsCount;
+                maxLightsCountPerCluster = cameraData.maxLightsCountPerCluster > 0 ? cameraData.maxLightsCountPerCluster : rendererData.defaultMaxLightsCountPerCluster;
+                debug = cameraData.debug;
             }
             else
             {
-                cullFarPlane = rendererData.defaultCullFarPlane;
+                clusterDimensionInfo.zFar = rendererData.defaultCullFarPlane;
+                clusterGridBlockSize = rendererData.clusterBlockGridSize;
                 maxLightsCount = rendererData.defaultMaxLightsCount;
                 maxLightsCountPerCluster = rendererData.defaultMaxLightsCountPerCluster;
+                debug = false;
             }
 
-            fov = (camera.cameraType == CameraType.Game) ? camera.fieldOfView : rendererData.defaultFov;
+            screenDimension.x = Screen.width;
+            screenDimension.y = Screen.height;
+            screenDimension.z = 1.0f / Screen.width;
+            screenDimension.w = 1.0f / Screen.height;
 
-            InitClusters();
+            this.camera = camera;
+            
+            InitClusterParameter();
+            InitComputeBuffers();
+            
+            CalculateClustersData();
         }
 
-        private void InitClusters()
+        private void InitComputeBuffers()
         {
-
+            int kernel = rendererData.clusterAABBComputerShader.FindKernel("CSMain");
+            // Create AABBs compute buffer
+            cbClusterAABBs = new ComputeBuffer(clusterDimensionInfo.clusterDimXYZ, Marshal.SizeOf<AABB>());
+            rendererData.clusterAABBComputerShader.SetBuffer(kernel, ShaderPropId_ClusterAABBs, cbClusterAABBs);
         }
 
-        public void Render(ScriptableRenderContext context, Camera camera)
+        private void ReleaseComputeBuffers()
         {
-            _context = context;
-            _camera = camera;
+            if (cbClusterAABBs != null)
+            {
+                cbClusterAABBs.Release();
+                cbClusterAABBs = null;
+            }
+        }
+        
+        private void InitClusterParameter()
+        {
+            clusterDimensionInfo.zNear = camera.nearClipPlane;
+            clusterDimensionInfo.halfFOVRadian = camera.fieldOfView * Mathf.Deg2Rad * 0.5f;
+
+            clusterDimensionInfo.clusterDimX = Mathf.CeilToInt(Screen.width / (float)clusterGridBlockSize);
+            clusterDimensionInfo.clusterDimY = Mathf.CeilToInt(Screen.height / (float) clusterGridBlockSize);
+            
+            /* 具体算法：在X、Y、Z三个方向对视锥体进行切分，X、Y方向在屏幕分辨率下使用clusterGridBlockSize为单位切分，clusterGridBlockSize为像素长度值。
+                        在Z方向使用指数方式分割，具体数值等于对应cluster纵切面的高度值。
+               使用公式：根据上面的描述，定义NEAR𝑘为Z方向上摄像机到第k个cluster的距离，H𝑘为Z方向第k个cluster的高度，那么NEAR𝑘 = NEAR𝑘₋₁ + H𝘬₋₁，因此NEAR₀ = NEAR
+                        设视锥体FOV为2Ɵ，那么H₀ = (2 * NEAR * tanƟ) / (clusterDimY)
+                        根据通项公式可得，NEAR𝑘 = NEAR * (1 + (2 * tanƟ) / clusterDimY)ᵏ
+                        最终求解 k = |log(-Z𝑣𝑠 / NEAR) / log(1 + (2 * tanƟ) / clusterDimY)|
+               说明：cluster为视空间下的计算结果
+            */
+            // 预计算 (2 * tanƟ) / clusterDimY
+            clusterDimensionInfo.tanHalfFOVDivDimY = (2.0f * Mathf.Tan(clusterDimensionInfo.halfFOVRadian) / clusterDimensionInfo.clusterDimY);
+            // 预计算 log(1 + (2 * tanƟ) / clusterDimY)
+            clusterDimensionInfo.logDimY = 1.0f / Mathf.Log(1.0f + clusterDimensionInfo.tanHalfFOVDivDimY);
+            // 利用最终求解公式计算在Z方向的cluster切分数量，即将zFar代入公式即可
+            clusterDimensionInfo.logDepth = Mathf.Log(clusterDimensionInfo.zFar / clusterDimensionInfo.zNear);
+            clusterDimensionInfo.clusterDimZ = Mathf.FloorToInt(clusterDimensionInfo.logDepth * clusterDimensionInfo.logDimY);
+
+            clusterDimensionInfo.clusterDimXYZ = clusterDimensionInfo.clusterDimX * clusterDimensionInfo.clusterDimY * clusterDimensionInfo.clusterDimZ;
+            
+            int[] gridDims = { clusterDimensionInfo.clusterDimX, clusterDimensionInfo.clusterDimY, clusterDimensionInfo.clusterDimZ };
+            
+            rendererData.clusterAABBComputerShader.SetInts(ShaderPropId_GridDim, gridDims);
+            rendererData.clusterAABBComputerShader.SetFloat(ShaderPropId_ViewNear, clusterDimensionInfo.zNear);
+            rendererData.clusterAABBComputerShader.SetInts(ShaderPropId_GridSize, new int[] { clusterGridBlockSize, clusterGridBlockSize });
+            rendererData.clusterAABBComputerShader.SetFloat(ShaderPropId_NearKRatio, 1.0f + clusterDimensionInfo.tanHalfFOVDivDimY);
+            rendererData.clusterAABBComputerShader.SetFloat(ShaderPropId_LogGridDimY, clusterDimensionInfo.logDimY);
+            rendererData.clusterAABBComputerShader.SetVector(ShaderPropId_ScreenDimension, screenDimension);
+
+            inverseProjMatrix = GL.GetGPUProjectionMatrix(camera.projectionMatrix, false).inverse;
+            rendererData.clusterAABBComputerShader.SetMatrix(ShaderPropId_InverseProjMatrix, inverseProjMatrix);
+        }
+
+        private void CalculateClustersData()
+        {
+            int threadsGroup = Mathf.CeilToInt(clusterDimensionInfo.clusterDimXYZ / 256.0f);
+
+            int kernel = rendererData.clusterAABBComputerShader.FindKernel("CSMain");
+            rendererData.clusterAABBComputerShader.Dispatch(kernel, threadsGroup, 1, 1);
+        }
+        
+        public void Render(ScriptableRenderContext context, Camera camera, Camera lastRenderCamera)
+        {
+            this.context = context;
+            this.camera = camera;
 
             PrepareForSceneWindow();
             if(!Cull())
@@ -99,18 +195,18 @@ namespace MyRenderPipeline
         // 设置
         void Setup()
         {
-            _context.SetupCameraProperties(_camera);        // 先设置摄像机属性等Shader变量
-            _buffer.ClearRenderTarget(true, true, Color.clear);     // 清除渲染目标，在SetupCameraProperties之后执行此步，可减少一次GL Draw的清屏操作
-            _buffer.BeginSample(bufferName);
+            context.SetupCameraProperties(camera);        // 先设置摄像机属性等Shader变量
+            cmdBuffer.ClearRenderTarget(true, true, Color.clear);     // 清除渲染目标，在SetupCameraProperties之后执行此步，可减少一次GL Draw的清屏操作
+            cmdBuffer.BeginSample(CMB_BUFFER_NAME);
             ExecuteBuffer();
         }
 
         // 剪裁
         bool Cull()
         {
-            if(_camera.TryGetCullingParameters(out ScriptableCullingParameters p))
+            if(camera.TryGetCullingParameters(out ScriptableCullingParameters p))
             {
-                cullingResults = _context.Cull(ref p);
+                cullingResults = context.Cull(ref p);
 
                 return true;
             }
@@ -122,34 +218,39 @@ namespace MyRenderPipeline
         void DrawVisibleGeometry()
         {
             //draw opaque geometry
-            var sortingSettings = new SortingSettings(_camera);
+            var sortingSettings = new SortingSettings(camera);
             var drawSettings = new DrawingSettings(unlitShaderTagId, sortingSettings);
             var filteringSettings = new FilteringSettings(RenderQueueRange.opaque);
-            _context.DrawRenderers(cullingResults, ref drawSettings, ref filteringSettings);
+            context.DrawRenderers(cullingResults, ref drawSettings, ref filteringSettings);
             
             //draw skybox
-            _context.DrawSkybox(_camera);
+            context.DrawSkybox(camera);
             
             //draw transparency geometry
             sortingSettings.criteria = SortingCriteria.CommonTransparent;
             drawSettings.sortingSettings = sortingSettings;
             filteringSettings.renderQueueRange = RenderQueueRange.transparent;
-            _context.DrawRenderers(cullingResults, ref drawSettings, ref filteringSettings);
+            context.DrawRenderers(cullingResults, ref drawSettings, ref filteringSettings);
         }
 
         // 向显卡提交所有绘制命令
         void Submit()
         {
-            _buffer.EndSample(bufferName);
+            cmdBuffer.EndSample(CMB_BUFFER_NAME);
             ExecuteBuffer();
-            _context.Submit();
+            context.Submit();
         }
 
         // 将渲染命令刷入Context
         void ExecuteBuffer()
         {
-            _context.ExecuteCommandBuffer(_buffer);
-            _buffer.Clear();
+            context.ExecuteCommandBuffer(cmdBuffer);
+            cmdBuffer.Clear();
+        }
+
+        public void Dispose()
+        {
+            ReleaseComputeBuffers();
         }
     }
 }

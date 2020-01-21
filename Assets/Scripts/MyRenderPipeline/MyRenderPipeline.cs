@@ -12,7 +12,7 @@ namespace MyRenderPipeline
             ForwardPlus,
         }
 
-        IPipelineRenderer _renderer;
+        private Camera lastRenderCamera;
         IDictionary<Camera, IPipelineRenderer> cameraRendererDic = new Dictionary<Camera, IPipelineRenderer>();
 
         public MyRenderPipeline()
@@ -34,8 +34,22 @@ namespace MyRenderPipeline
                     renderer.Setup(context, cam);
                 }
 
-                renderer.Render(context, cam);
+                renderer.Render(context, cam, lastRenderCamera);
+                lastRenderCamera = cam;
             }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+
+            foreach (var renderer in cameraRendererDic.Values)
+            {
+                renderer.Dispose();
+            }
+            
+            cameraRendererDic.Clear();
+            lastRenderCamera = null;
         }
     }
 }

@@ -932,12 +932,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7be6072bf15524b71afc68f0f9a1edf5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_ClusterBlockGridSize: 100
-  m_MaxLightsCount: 1024
-  m_MaxLightsCountPerCluster: 128
-  cs_ComputeClusterAABB: {fileID: 0}
-  cs_AssignLightsToCluster: {fileID: 0}
-  cs_ClusterSample: {fileID: 0}
+  cullFarPlane: 200
+  clusterGridBlockSize: 64
+  maxLightsCount: 0
+  maxLightsCountPerCluster: 0
+  debug: 0
 --- !u!1 &986741357
 GameObject:
   m_ObjectHideFlags: 0
