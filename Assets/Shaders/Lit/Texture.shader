@@ -92,5 +92,10 @@
             ENDCG
         }
 
+        Pass
+        {
+            Tags { "RenderType"="SRPDefaultUnlit" }
+
+        }
     }
 }

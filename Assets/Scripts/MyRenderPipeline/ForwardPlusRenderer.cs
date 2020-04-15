@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -31,6 +33,8 @@ namespace MyRenderPipeline
 
         CullingResults cullingResults;
 
+        private BaseRendererJob lightsCullingJob;
+        
         #region For Editor Partial Methods
         partial void PrepareForSceneWindow();
         partial void DrawGizmos();
@@ -78,6 +82,10 @@ namespace MyRenderPipeline
         public void Setup(ScriptableRenderContext context, Camera camera)
         {
             InitRendererByCamera(context, camera);
+
+            NativeLeakDetection.Mode = NativeLeakDetectionMode.EnabledWithStackTrace;
+
+            lightsCullingJob = new FrustumLightsCullingJob(clusterGridBlockSize, maxLightsCount, maxLightsCountPerCluster);
         }
 
         private void InitRendererByCamera(ScriptableRenderContext context, Camera camera)
@@ -109,11 +117,12 @@ namespace MyRenderPipeline
             screenDimension.w = 1.0f / Screen.height;
 
             this.camera = camera;
-            
+/*            
             InitClusterParameter();
             InitComputeBuffers();
             
             CalculateClustersData();
+*/            
         }
 
         private void InitComputeBuffers()
@@ -193,10 +202,14 @@ namespace MyRenderPipeline
             if(!Cull())
                 return;
             
+            JobsBeforeRender(camera, context, cullingResults);
+
             Setup();
             DrawVisibleGeometry();
             DrawGizmos();
             Submit();
+            
+            JobsAfterRender();
         }
 
         // 设置
@@ -258,6 +271,26 @@ namespace MyRenderPipeline
         public void Dispose()
         {
             ReleaseComputeBuffers();
+            DisposeAllJobs();
+        }
+
+        private void JobsBeforeRender(Camera camera, ScriptableRenderContext context, CullingResults cullingResults)
+        {
+            lightsCullingJob.BeforeRender(camera, context, cullingResults);
+        }
+
+        private void JobsAfterRender()
+        {
+            lightsCullingJob.AfterRender();
+        }
+
+        private void DisposeAllJobs()
+        {
+            if (lightsCullingJob != null)
+            {
+                lightsCullingJob.Dispose();
+                lightsCullingJob = null;
+            }
         }
     }
 }

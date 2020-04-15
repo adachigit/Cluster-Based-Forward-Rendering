@@ -21,6 +21,13 @@ namespace MyRenderPipeline
         };
         private ClusterGizmosInfo[] clusterGizmoInfos;
         private float clusterGizmoFactor = 0.7f;
+
+        #region Gizmos Stored Properties
+
+        private Color gizmosColor;
+        private Matrix4x4 gizmosMatrix;
+        
+        #endregion
         
         partial void DrawGizmos()
         {
@@ -28,6 +35,11 @@ namespace MyRenderPipeline
             {
                 context.DrawGizmos(camera, GizmoSubset.PreImageEffects);
                 context.DrawGizmos(camera, GizmoSubset.PostImageEffects);
+            }
+
+            if (debug)
+            {
+                DrawClusterGizmos();
             }
         }
 
@@ -61,6 +73,57 @@ namespace MyRenderPipeline
                 info.maxRightBottom = new Vector3(Max.x, Min.y, Max.z);
                 clusterGizmoInfos[i] = info;
             }
+        }
+
+        private void StoreGizmosProperties()
+        {
+            gizmosColor = Gizmos.color;
+            gizmosMatrix = Gizmos.matrix;
+        }
+
+        private void RestoreGizmosProperties()
+        {
+            Gizmos.color = gizmosColor;
+            Gizmos.matrix = gizmosMatrix;
+        }
+        
+        private void DrawClusterGizmos()
+        {
+            if (null == clusterGizmoInfos) return;
+            
+            Handles.DrawLine(Vector3.zero, new Vector3(0f, 100f, 50f));
+/*
+            StoreGizmosProperties();
+            
+            var viewToWorldMatrix = camera.cameraToWorldMatrix;
+            viewToWorldMatrix.m22 *= -1;    //Reverse Z-axis
+            
+            Gizmos.matrix = viewToWorldMatrix;
+            Gizmos.color = Color.white;
+
+            for (int i = 0; i < clusterGizmoInfos.Length; ++i)
+            {
+                ClusterGizmosInfo info = clusterGizmoInfos[i];
+                
+                //front square
+                Gizmos.DrawLine(info.minLeftTop, info.minRightTop);
+                Gizmos.DrawLine(info.minRightTop, info.minRightBottom);
+                Gizmos.DrawLine(info.minRightBottom, info.minLeftBottom);
+                Gizmos.DrawLine(info.minLeftBottom, info.minLeftTop);
+                //back square
+                Gizmos.DrawLine(info.maxLeftTop, info.maxRightTop);
+                Gizmos.DrawLine(info.maxRightTop, info.maxRightBottom);
+                Gizmos.DrawLine(info.maxRightBottom, info.maxLeftBottom);
+                Gizmos.DrawLine(info.maxLeftBottom, info.maxLeftTop);
+                //connect line
+                Gizmos.DrawLine(info.minLeftTop, info.maxLeftTop);
+                Gizmos.DrawLine(info.minRightTop, info.maxRightTop);
+                Gizmos.DrawLine(info.minRightBottom, info.maxRightBottom);
+                Gizmos.DrawLine(info.minLeftBottom, info.maxLeftBottom);
+            }
+            
+            RestoreGizmosProperties();
+*/            
         }
 #endif
 

@@ -426,8 +426,14 @@ public class Script_ClusterBasedLighting : MonoBehaviour
 
     void ClearClusterFlags()
     {
+#if UNITY_EDITOR
         Array.Clear(m_ClusterFlagInfos, 0, m_ClusterFlagInfos.Length);
         cb_ClusterFlags.SetData(m_ClusterFlagInfos);
+#else
+        float[] flags = new float[m_DimData.clusterDimXYZ];
+        Array.Clear(flags, 0, flags.Length);
+        cb_ClusterFlags.SetData(flags);
+#endif
     }
 
     void Pass_ClusterSample()

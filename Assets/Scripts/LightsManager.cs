@@ -56,10 +56,10 @@ public class LightsManager : MonoBehaviour
             signY = Random.Range(-1.0f, 1.0f);
 
             GameObject go = new GameObject();
-            go.transform.position = m_Camera.transform.localToWorldMatrix * new Vector3(x * signX, y * signY, z);
+            go.transform.position = m_Camera.transform.localToWorldMatrix * new Vector4(x * signX, y * signY, z, 1.0f);
             Light l = go.AddComponent<Light>();
             l.type = LightType.Point;
-            l.range = Random.Range(5.0f, 10.0f);
+            l.range = Random.Range(1.0f, 2.0f);
 
             go.transform.parent = m_LightsGroupObject.transform;
         }
