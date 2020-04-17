@@ -100,8 +100,14 @@
  <Reference Include="UnityEngine.TestRunner">
  <HintPath>/Users/hanyi/Documents/Projects/My Projects/Unity Rendering Study/Cluster-Based-Forward-Rendering/Library/ScriptAssemblies/UnityEngine.TestRunner.dll</HintPath>
  </Reference>
+ <Reference Include="Unity.RenderPipeline.Universal.ShaderLibrary">
+ <HintPath>/Users/hanyi/Documents/Projects/My Projects/Unity Rendering Study/Cluster-Based-Forward-Rendering/Library/ScriptAssemblies/Unity.RenderPipeline.Universal.ShaderLibrary.dll</HintPath>
+ </Reference>
  <Reference Include="Unity.Timeline.Editor">
  <HintPath>/Users/hanyi/Documents/Projects/My Projects/Unity Rendering Study/Cluster-Based-Forward-Rendering/Library/ScriptAssemblies/Unity.Timeline.Editor.dll</HintPath>
+ </Reference>
+ <Reference Include="Unity.RenderPipelines.Universal.Shaders">
+ <HintPath>/Users/hanyi/Documents/Projects/My Projects/Unity Rendering Study/Cluster-Based-Forward-Rendering/Library/ScriptAssemblies/Unity.RenderPipelines.Universal.Shaders.dll</HintPath>
  </Reference>
  <Reference Include="Unity.Burst">
  <HintPath>/Users/hanyi/Documents/Projects/My Projects/Unity Rendering Study/Cluster-Based-Forward-Rendering/Library/ScriptAssemblies/Unity.Burst.dll</HintPath>
@@ -124,6 +130,12 @@
  <Reference Include="Unity.TextMeshPro.Editor">
  <HintPath>/Users/hanyi/Documents/Projects/My Projects/Unity Rendering Study/Cluster-Based-Forward-Rendering/Library/ScriptAssemblies/Unity.TextMeshPro.Editor.dll</HintPath>
  </Reference>
+ <Reference Include="Unity.RenderPipelines.Universal.Runtime">
+ <HintPath>/Users/hanyi/Documents/Projects/My Projects/Unity Rendering Study/Cluster-Based-Forward-Rendering/Library/ScriptAssemblies/Unity.RenderPipelines.Universal.Runtime.dll</HintPath>
+ </Reference>
+ <Reference Include="Unity.RenderPipelines.Universal.Editor">
+ <HintPath>/Users/hanyi/Documents/Projects/My Projects/Unity Rendering Study/Cluster-Based-Forward-Rendering/Library/ScriptAssemblies/Unity.RenderPipelines.Universal.Editor.dll</HintPath>
+ </Reference>
  <Reference Include="UnityEngine.UI">
  <HintPath>/Users/hanyi/Documents/Projects/My Projects/Unity Rendering Study/Cluster-Based-Forward-Rendering/Library/ScriptAssemblies/UnityEngine.UI.dll</HintPath>
  </Reference>
@@ -136,6 +148,9 @@
  <Reference Include="Unity.Rider.Editor">
  <HintPath>/Users/hanyi/Documents/Projects/My Projects/Unity Rendering Study/Cluster-Based-Forward-Rendering/Library/ScriptAssemblies/Unity.Rider.Editor.dll</HintPath>
  </Reference>
+ <Reference Include="Unity.RenderPipelines.ShaderGraph.ShaderGraphLibrary">
+ <HintPath>/Users/hanyi/Documents/Projects/My Projects/Unity Rendering Study/Cluster-Based-Forward-Rendering/Library/ScriptAssemblies/Unity.RenderPipelines.ShaderGraph.ShaderGraphLibrary.dll</HintPath>
+ </Reference>
  <Reference Include="Unity.Mathematics">
  <HintPath>/Users/hanyi/Documents/Projects/My Projects/Unity Rendering Study/Cluster-Based-Forward-Rendering/Library/ScriptAssemblies/Unity.Mathematics.dll</HintPath>
  </Reference>
@@ -144,6 +159,9 @@
  </Reference>
  <Reference Include="Unity.2D.Tilemap.Editor">
  <HintPath>/Users/hanyi/Documents/Projects/My Projects/Unity Rendering Study/Cluster-Based-Forward-Rendering/Library/ScriptAssemblies/Unity.2D.Tilemap.Editor.dll</HintPath>
+ </Reference>
+ <Reference Include="Unity.ShaderGraph.Editor">
+ <HintPath>/Users/hanyi/Documents/Projects/My Projects/Unity Rendering Study/Cluster-Based-Forward-Rendering/Library/ScriptAssemblies/Unity.ShaderGraph.Editor.dll</HintPath>
  </Reference>
  <Reference Include="Unity.Mathematics.Editor">
  <HintPath>/Users/hanyi/Documents/Projects/My Projects/Unity Rendering Study/Cluster-Based-Forward-Rendering/Library/ScriptAssemblies/Unity.Mathematics.Editor.dll</HintPath>
@@ -353,7 +371,7 @@
  <HintPath>/Users/hanyi/Documents/Projects/My Projects/Unity Rendering Study/Cluster-Based-Forward-Rendering/Library/PackageCache/com.unity.collections@0.7.1-preview.3/System.Runtime.CompilerServices.Unsafe.dll</HintPath>
  </Reference>
  <Reference Include="ICSharpCode.NRefactory">
- <HintPath>/Users/hanyi/Documents/Projects/My Projects/Unity Rendering Study/Cluster-Based-Forward-Rendering/Library/PackageCache/com.unity.render-pipelines.core@7.1.8/Editor/ShaderGenerator/ICSharpCode.NRefactory.dll</HintPath>
+ <HintPath>/Users/hanyi/Documents/Projects/My Projects/Unity Rendering Study/Cluster-Based-Forward-Rendering/Library/PackageCache/com.unity.render-pipelines.core@7.3.1/Editor/ShaderGenerator/ICSharpCode.NRefactory.dll</HintPath>
  </Reference>
  <Reference Include="nunit.framework">
  <HintPath>/Users/hanyi/Documents/Projects/My Projects/Unity Rendering Study/Cluster-Based-Forward-Rendering/Library/PackageCache/com.unity.ext.nunit@1.0.0/net35/unity-custom/nunit.framework.dll</HintPath>

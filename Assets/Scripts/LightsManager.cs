@@ -22,14 +22,11 @@ public class LightsManager : MonoBehaviour
     /// </summary>
     void Start()
     {
-        MinZ = m_Camera.nearClipPlane;
+        MinZ = m_Camera.nearClipPlane + (m_Camera.farClipPlane - m_Camera.nearClipPlane) / 5.0f;
         MaxZ = m_Camera.farClipPlane;
 
-        MinY = m_Camera.nearClipPlane * Mathf.Tan(m_Camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
-        MaxY = m_Camera.farClipPlane * Mathf.Tan(m_Camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
-
+        MinY = 0.0f;//m_Camera.nearClipPlane * Mathf.Tan(m_Camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
         MinX = m_Camera.aspect * MinY;
-        MaxX = m_Camera.aspect * MaxY;
     }
 
     public void CreateLights()
@@ -49,9 +46,14 @@ public class LightsManager : MonoBehaviour
 
         for(int i = 0; i < lightCounts; ++i)
         {
+            z = Random.Range(MinZ, MaxZ);
+            
+            MaxY = z * Mathf.Tan(m_Camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
+            MaxX = m_Camera.aspect * MaxY;
+            
             x = Random.Range(MinX, MaxX);
             y = Random.Range(MinY, MaxY);
-            z = Random.Range(MinZ, MaxZ);
+            
             signX = Random.Range(-1.0f, 1.0f);
             signY = Random.Range(-1.0f, 1.0f);
 
@@ -60,6 +62,8 @@ public class LightsManager : MonoBehaviour
             Light l = go.AddComponent<Light>();
             l.type = LightType.Point;
             l.range = Random.Range(1.0f, 2.0f);
+            l.color = new Color(Random.Range(0.0f, 1.0f), Random.Range(0.0f, 1.0f), Random.Range(0.0f, 1.0f));
+            l.intensity = Random.Range(1.0f, 3.0f);
 
             go.transform.parent = m_LightsGroupObject.transform;
         }

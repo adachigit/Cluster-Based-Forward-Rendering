@@ -39,12 +39,20 @@ namespace MyRenderPipeline
         }
 
         [StructLayout(LayoutKind.Sequential)]
+        public struct AABB
+        {
+            public Vector4 Min;
+            public Vector4 Max;
+        }
+        
+        [StructLayout(LayoutKind.Sequential)]
         public struct Light
         {
             public EnumDef.LightType type;
             public float range;
             public float halfAngle;        // for spot light
             public float radius;            // for spot light
+            public float intensity;
             public Color color;
             public float4 worldPos;
             public float4 worldDir;

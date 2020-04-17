@@ -1,4 +1,5 @@
 using System;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -32,11 +33,8 @@ namespace MyRenderPipeline
         
         public float4x4 InverseProjectionMat { get; set; }
 
-        public FrustumLightsCullingJob(int gridSize, int maxLightsCount, int maxLightsCountPerFrustum, int jobBatchCount = 16)
+        public FrustumLightsCullingJob(int jobBatchCount = 8)
         {
-            this.gridSize = gridSize;
-            this.maxLightsCount = maxLightsCount;
-            this.maxLightsCountPerFrustum = maxLightsCountPerFrustum;
             this.jobBatchCount = jobBatchCount;
         }
 
@@ -119,6 +117,7 @@ namespace MyRenderPipeline
             };
         }
         
+        [BurstCompile(CompileSynchronously = true)]
         struct LightsCullingParallelFor : IJobParallelFor
         {
             [ReadOnly] public NativeArray<DataTypes.Light> lights;
@@ -257,7 +256,29 @@ namespace MyRenderPipeline
                 lights[i] = light;
             }
         }
-        
+
+        public override void Init(Camera camera, ScriptableRenderContext content)
+        {
+            NativeLeakDetection.Mode = NativeLeakDetectionMode.EnabledWithStackTrace;
+            
+            MyRenderPipelineAsset pipelineAsset = GraphicsSettings.renderPipelineAsset as MyRenderPipelineAsset;
+            var rendererData = pipelineAsset.GetRendererData<ForwardPlusRendererData>(MyRenderPipeline.RendererType.ForwardPlus);
+
+            ForwardPlusCameraData cameraData = camera.GetComponent<ForwardPlusCameraData>();
+            if(cameraData != null)
+            {
+                gridSize = cameraData.clusterGridBlockSize > 0 ? cameraData.clusterGridBlockSize : rendererData.clusterBlockGridSize;
+                maxLightsCount = cameraData.maxLightsCount > 0 ? cameraData.maxLightsCount : rendererData.defaultMaxLightsCount;
+                maxLightsCountPerFrustum = cameraData.maxLightsCountPerCluster > 0 ? cameraData.maxLightsCountPerCluster : rendererData.defaultMaxLightsCountPerCluster;
+            }
+            else
+            {
+                gridSize = rendererData.clusterBlockGridSize;
+                maxLightsCount = rendererData.defaultMaxLightsCount;
+                maxLightsCountPerFrustum = rendererData.defaultMaxLightsCountPerCluster;
+            }
+        }
+
         public override void BeforeRender(Camera camera, ScriptableRenderContext context, CullingResults cullingResults)
         {
             if (camera.scaledPixelWidth != screenDimension.x || camera.scaledPixelHeight != screenDimension.y)

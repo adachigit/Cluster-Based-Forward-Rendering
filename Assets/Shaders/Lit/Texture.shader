@@ -94,7 +94,7 @@
 
         Pass
         {
-            Tags { "RenderType"="SRPDefaultUnlit" }
+            Tags { "RenderType"="SRPDefaultLit" }
 
         }
     }

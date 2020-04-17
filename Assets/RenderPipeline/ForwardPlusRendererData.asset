@@ -15,8 +15,8 @@ MonoBehaviour:
   clusterBlockGridSize: 32
   clusterFarPlane: 500
   defaultCullFarPlane: 200
-  defaultMaxLightsCount: 512
-  defaultMaxLightsCountPerCluster: 32
+  defaultMaxLightsCount: 1024
+  defaultMaxLightsCountPerCluster: 64
   defaultFov: 0
   clusterAABBComputerShader: {fileID: 7200000, guid: b108a207de6bada4dae6d131d039ef49,
     type: 3}
