@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
@@ -7,60 +8,68 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using static Unity.Mathematics.math;
 using float3 = Unity.Mathematics.float3;
+using float4 = Unity.Mathematics.float4;
 
 namespace MyRenderPipeline
 {
     public class FrustumLightsCullingJob : BaseRendererJob
     {
-        private NativeArray<DataTypes.Frustum> viewFrustums;
-        private NativeArray<DataTypes.Light> lights;
-        private NativeMultiHashMap<int, short> frustumLightIndexes;
-        private int lightsCount;
-        private Array lightIndexList;
+        private NativeArray<DataTypes.Frustum> _viewFrustums;
+        private NativeArray<DataTypes.Light> _lights;
+        private NativeMultiHashMap<int, short> _frustumLightIndexes;
+        private int _lightsCount;
 
-        private JobHandle jobHandle;
-        
-        private int2 screenDimension;
-        
-        private int gridSize;
-        private int frustumsCount;
-        private int frustumsCountVertical;
-        private int frustumsCountHorizontal;
+        private readonly CommandBuffer _cmdBuffer = new CommandBuffer()
+        {
+            name = "FrustumLightsCulling",
+        };
 
-        private int maxLightsCount;
-        private int maxLightsCountPerFrustum;
-        private int jobBatchCount;
+        private ComputeBuffer _cbLightBuffer;
+        private ComputeBuffer _cbLightIndexListBuffer;
         
-        public float4x4 InverseProjectionMat { get; set; }
+        private JobHandle _jobHandle;
+        
+        private int2 _screenDimension;
+        
+        private int _gridSize;
+        private int _frustumsCount;
+        private int _frustumsCountVertical;
+        private int _frustumsCountHorizontal;
+
+        private int _maxLightsCount;
+        private int _maxLightsCountPerFrustum;
+        private readonly int _jobBatchCount;
+        
+        public float4x4 inverseProjectionMat { get; set; }
 
         public FrustumLightsCullingJob(int jobBatchCount = 8)
         {
-            this.jobBatchCount = jobBatchCount;
+            this._jobBatchCount = jobBatchCount;
         }
 
         private void BuildViewFrustums()
         {
-            if (viewFrustums.IsCreated)
+            if (_viewFrustums.IsCreated)
             {
-                viewFrustums.Dispose();
+                _viewFrustums.Dispose();
             }
 
             //Calculate frustums count in horizontal
-            frustumsCountHorizontal = (screenDimension.x / gridSize);
-            frustumsCountHorizontal += ((screenDimension.x % gridSize == 0) ? 0 : 1);
+            _frustumsCountHorizontal = (_screenDimension.x / _gridSize);
+            _frustumsCountHorizontal += ((_screenDimension.x % _gridSize == 0) ? 0 : 1);
             //Calculate frustums count in vertical
-            frustumsCountVertical = screenDimension.y / gridSize;
-            frustumsCountVertical += ((0 == screenDimension.y % gridSize) ? 0 : 1);
+            _frustumsCountVertical = _screenDimension.y / _gridSize;
+            _frustumsCountVertical += ((0 == _screenDimension.y % _gridSize) ? 0 : 1);
             //Calculate total frustums count
-            frustumsCount = frustumsCountHorizontal * frustumsCountVertical;
+            _frustumsCount = _frustumsCountHorizontal * _frustumsCountVertical;
 
-            viewFrustums = new NativeArray<DataTypes.Frustum>(frustumsCount, Allocator.Persistent);
+            _viewFrustums = new NativeArray<DataTypes.Frustum>(_frustumsCount, Allocator.Persistent);
 
-            for (int i = 0; i < frustumsCountVertical; ++i)
+            for (int i = 0; i < _frustumsCountVertical; ++i)
             {
-                for (int j = 0; j < frustumsCountHorizontal; ++j)
+                for (int j = 0; j < _frustumsCountHorizontal; ++j)
                 {
-                    viewFrustums[i * frustumsCountHorizontal + j] = BuildFrustum(int2(i, j));
+                    _viewFrustums[i * _frustumsCountHorizontal + j] = BuildFrustum(int2(j, i));
                 }
             }
         }
@@ -73,27 +82,25 @@ namespace MyRenderPipeline
              */
             float4[] screenPos = new float4[]
             {
-                float4(frustumIndex.xy * gridSize, -1.0f, 1.0f),
-                float4(float2(frustumIndex.x + 1, frustumIndex.y) * gridSize, -1.0f, 1.0f),
-                float4(float2(frustumIndex.x, frustumIndex.y + 1) * gridSize, -1.0f, 1.0f),
-                float4(float2(frustumIndex.x + 1, frustumIndex.y + 1) * gridSize, -1.0f, 1.0f),
+                float4(frustumIndex.xy * _gridSize, -1.0f, 1.0f),
+                float4(float2(frustumIndex.x + 1, frustumIndex.y) * _gridSize, -1.0f, 1.0f),
+                float4(float2(frustumIndex.x, frustumIndex.y + 1) * _gridSize, -1.0f, 1.0f),
+                float4(float2(frustumIndex.x + 1, frustumIndex.y + 1) * _gridSize, -1.0f, 1.0f),
             };
 
             float3[] viewPos = new float3[]
             {
-                MathUtils.ScreenToView(screenPos[0], screenDimension, InverseProjectionMat).xyz,
-                MathUtils.ScreenToView(screenPos[1], screenDimension, InverseProjectionMat).xyz,
-                MathUtils.ScreenToView(screenPos[2], screenDimension, InverseProjectionMat).xyz,
-                MathUtils.ScreenToView(screenPos[3], screenDimension, InverseProjectionMat).xyz,
+                MathUtils.ScreenToView(screenPos[0], _screenDimension, inverseProjectionMat).xyz,
+                MathUtils.ScreenToView(screenPos[1], _screenDimension, inverseProjectionMat).xyz,
+                MathUtils.ScreenToView(screenPos[2], _screenDimension, inverseProjectionMat).xyz,
+                MathUtils.ScreenToView(screenPos[3], _screenDimension, inverseProjectionMat).xyz,
             };
             
             float3 eye = float3.zero;
 
-            DataTypes.Plane left = BuildPlane(eye, viewPos[2], viewPos[0]);
-            
             return new DataTypes.Frustum
             {
-                planeLeft = left,//BuildPlane(eye, viewPos[2], viewPos[0]),
+                planeLeft = BuildPlane(eye, viewPos[2], viewPos[0]),
                 planeRight = BuildPlane(eye, viewPos[1], viewPos[3]),
                 planeTop = BuildPlane(eye, viewPos[0], viewPos[1]),
                 planeBottom = BuildPlane(eye, viewPos[3], viewPos[2]),
@@ -108,12 +115,12 @@ namespace MyRenderPipeline
         {
             float3 v1 = p1 - p0;
             float3 v2 = p2 - p0;
-            float3 N = normalize(cross(v1, v2));
+            float3 n = normalize(cross(v1, v2));
 
             return new DataTypes.Plane
             {
-                normal = float4(N, 0.0f),
-                distance = dot(N, p0),
+                normal = float4(n, 0.0f),
+                distance = dot(n, p0),
             };
         }
         
@@ -141,14 +148,14 @@ namespace MyRenderPipeline
                             ++lightCount;
                             break;
                         case EnumDef.LightType.Point:
-                            if (PointLightInFrustum(frustum, light))
+                            if (PointLightInFrustum(ref frustum, ref light))
                             {
                                 lightsCountAndIndexes.Add(index, i);
                                 ++lightCount;
                             }
                             break;
                         case EnumDef.LightType.Spot:
-                            if (SpotLightInFrustum(frustum, light))
+                            if (SpotLightInFrustum(ref frustum, ref light))
                             {
                                 lightsCountAndIndexes.Add(index, i);
                                 ++lightCount;
@@ -159,11 +166,9 @@ namespace MyRenderPipeline
                     if (lightCount >= maxLightsCount)
                         break;
                 }
-
-                lightsCountAndIndexes.Add(index, lightCount);    // Light index terminal flag
             }
             
-            private bool PointLightInFrustum(DataTypes.Frustum frustum, DataTypes.Light light)
+            private bool PointLightInFrustum(ref DataTypes.Frustum frustum, ref DataTypes.Light light)
             {
                 var sphere = new DataTypes.Sphere
                 {
@@ -183,7 +188,7 @@ namespace MyRenderPipeline
                 return true;
             }
 
-            private bool SpotLightInFrustum(DataTypes.Frustum frustum, DataTypes.Light light)
+            private bool SpotLightInFrustum(ref DataTypes.Frustum frustum, ref DataTypes.Light light)
             {
                 
                 var cone = new DataTypes.Cone
@@ -209,16 +214,16 @@ namespace MyRenderPipeline
 
         private void CollectVisibleLights(Camera camera, CullingResults cullingResults)
         {
-            if (lights.IsCreated)
+            if (_lights.IsCreated)
             {
-                lights.Dispose();
+                _lights.Dispose();
             }
 
-            Matrix4x4 worldToViewMat = camera.worldToCameraMatrix;
-            lightsCount = cullingResults.visibleLights.Length > maxLightsCount ? maxLightsCount : cullingResults.visibleLights.Length;
-            lights = new NativeArray<DataTypes.Light>(lightsCount, Allocator.TempJob);
+            Matrix4x4 worldToViewMat = camera.transform.worldToLocalMatrix;
+            _lightsCount = cullingResults.visibleLights.Length > _maxLightsCount ? _maxLightsCount : cullingResults.visibleLights.Length;
+            _lights = new NativeArray<DataTypes.Light>(_lightsCount, Allocator.TempJob);
 
-            for (int i = 0; i < lightsCount; ++i)
+            for (int i = 0; i < _lightsCount; ++i)
             {
                 VisibleLight visibleLight = cullingResults.visibleLights[i];
                 var light = new DataTypes.Light();
@@ -227,8 +232,8 @@ namespace MyRenderPipeline
                 {
                 case LightType.Directional:
                     light.type = EnumDef.LightType.Directional;
-                    light.worldDir = visibleLight.localToWorldMatrix.GetColumn(2);
-                    light.viewDir = mul(worldToViewMat, visibleLight.localToWorldMatrix.GetColumn(2));
+                    light.worldDir = -visibleLight.localToWorldMatrix.GetColumn(2);
+                    light.viewDir = mul(worldToViewMat, -visibleLight.localToWorldMatrix.GetColumn(2));
                     light.color = visibleLight.finalColor;
                     break;
                 case LightType.Point:
@@ -253,7 +258,7 @@ namespace MyRenderPipeline
                     continue;
                 }
 
-                lights[i] = light;
+                _lights[i] = light;
             }
         }
 
@@ -261,80 +266,180 @@ namespace MyRenderPipeline
         {
             NativeLeakDetection.Mode = NativeLeakDetectionMode.EnabledWithStackTrace;
             
+            InitConstantBuffers(_cmdBuffer);
+        }
+
+        private void ReloadRendererConfigure(Camera camera)
+        {
             MyRenderPipelineAsset pipelineAsset = GraphicsSettings.renderPipelineAsset as MyRenderPipelineAsset;
             var rendererData = pipelineAsset.GetRendererData<ForwardPlusRendererData>(MyRenderPipeline.RendererType.ForwardPlus);
 
             ForwardPlusCameraData cameraData = camera.GetComponent<ForwardPlusCameraData>();
             if(cameraData != null)
             {
-                gridSize = cameraData.clusterGridBlockSize > 0 ? cameraData.clusterGridBlockSize : rendererData.clusterBlockGridSize;
-                maxLightsCount = cameraData.maxLightsCount > 0 ? cameraData.maxLightsCount : rendererData.defaultMaxLightsCount;
-                maxLightsCountPerFrustum = cameraData.maxLightsCountPerCluster > 0 ? cameraData.maxLightsCountPerCluster : rendererData.defaultMaxLightsCountPerCluster;
+                _gridSize = cameraData.clusterGridBlockSize > 0 ? cameraData.clusterGridBlockSize : rendererData.clusterBlockGridSize;
+                _maxLightsCount = cameraData.maxLightsCount > 0 ? cameraData.maxLightsCount : rendererData.defaultMaxLightsCount;
+                _maxLightsCountPerFrustum = cameraData.maxLightsCountPerCluster > 0 ? cameraData.maxLightsCountPerCluster : rendererData.defaultMaxLightsCountPerCluster;
             }
             else
             {
-                gridSize = rendererData.clusterBlockGridSize;
-                maxLightsCount = rendererData.defaultMaxLightsCount;
-                maxLightsCountPerFrustum = rendererData.defaultMaxLightsCountPerCluster;
+                _gridSize = rendererData.clusterBlockGridSize;
+                _maxLightsCount = rendererData.defaultMaxLightsCount;
+                _maxLightsCountPerFrustum = rendererData.defaultMaxLightsCountPerCluster;
             }
+        }
+        
+        public override void BeforeCulling(ref ScriptableCullingParameters param)
+        {
+            param.maximumVisibleLights = _maxLightsCount;
         }
 
         public override void BeforeRender(Camera camera, ScriptableRenderContext context, CullingResults cullingResults)
         {
-            if (camera.scaledPixelWidth != screenDimension.x || camera.scaledPixelHeight != screenDimension.y)
+            if (camera.scaledPixelWidth != _screenDimension.x || camera.scaledPixelHeight != _screenDimension.y)
             {
-                screenDimension.x = camera.scaledPixelWidth;
-                screenDimension.y = camera.scaledPixelHeight;
+                _screenDimension.x = camera.scaledPixelWidth;
+                _screenDimension.y = camera.scaledPixelHeight;
 
-                InverseProjectionMat = GL.GetGPUProjectionMatrix(camera.projectionMatrix, false).inverse;
+                inverseProjectionMat = GL.GetGPUProjectionMatrix(camera.projectionMatrix, false).inverse;
                 
+                ReloadRendererConfigure(camera);
                 BuildViewFrustums();
                 
-                Debug.Log($"Rebuild frustums. GirdSize is {gridSize}, Frustums count is {frustumsCount}, viewFrustums size is {viewFrustums.Length}");
+                _cmdBuffer.SetGlobalVector(ShaderIdsAndConstants.PropId_FrustumParamsId, new Vector4(_frustumsCountHorizontal, _frustumsCountVertical, _gridSize, _frustumsCount));
+                
+                context.ExecuteCommandBuffer(_cmdBuffer);
+                _cmdBuffer.Clear();
+                
+                Debug.Log($"Rebuild frustums. GirdSize is {_gridSize}, Frustums count is {_frustumsCount}, viewFrustums size is {_viewFrustums.Length}");
             }
 
             CollectVisibleLights(camera, cullingResults);
             
-            frustumLightIndexes = new NativeMultiHashMap<int, short>(frustumsCount * (maxLightsCountPerFrustum + 1 /* Plus 1 for light count */), Allocator.TempJob);
+            _frustumLightIndexes = new NativeMultiHashMap<int, short>(_frustumsCount * _maxLightsCountPerFrustum, Allocator.TempJob);
 
             var job = new LightsCullingParallelFor
             {
-                lights = lights,
-                frustums = viewFrustums,
-                lightsCountAndIndexes = frustumLightIndexes.AsParallelWriter(),
-                maxLightsCount = 32,
+                lights = _lights,
+                frustums = _viewFrustums,
+                lightsCountAndIndexes = _frustumLightIndexes.AsParallelWriter(),
+                maxLightsCount = _maxLightsCountPerFrustum,
             };
-            jobHandle = job.Schedule(frustumsCount, jobBatchCount);
+            _jobHandle = job.Schedule(_frustumsCount, _jobBatchCount);
         }
 
-        private void ReleaseResources()
+        private unsafe void InitConstantBuffers(CommandBuffer cmdBuffer)
         {
-            if (lights.IsCreated)
+            _cbLightBuffer = new ComputeBuffer(ShaderIdsAndConstants.ConstBuf_LightBuffer_EntriesCount, sizeof(float4), ComputeBufferType.Constant);
+            _cbLightIndexListBuffer = new ComputeBuffer(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, sizeof(int4), ComputeBufferType.Constant);
+        }
+
+        private void ReleaseConstantBuffers()
+        {
+            if (_cbLightBuffer != null)
             {
-                lights.Dispose();
+                _cbLightBuffer.Release();
+                _cbLightBuffer = null;
             }
 
-            if (frustumLightIndexes.IsCreated)
+            if (_cbLightIndexListBuffer != null)
             {
-                frustumLightIndexes.Dispose();
+                _cbLightIndexListBuffer.Release();
+                _cbLightIndexListBuffer = null;
+            }
+        }
+
+        private void ReleaseJobResources()
+        {
+            if (_lights.IsCreated)
+            {
+                _lights.Dispose();
+            }
+            if (_frustumLightIndexes.IsCreated)
+            {
+                _frustumLightIndexes.Dispose();
             }
         }
         
-        public override void AfterRender()
+        public override void AfterRender(Camera camera, ScriptableRenderContext context)
         {
-            jobHandle.Complete();
+            _jobHandle.Complete();
+
+            GenerateLightsConstantBuffers(_cmdBuffer);
             
-            ReleaseResources();
+            context.ExecuteCommandBuffer(_cmdBuffer);
+            _cmdBuffer.Clear();
+            
+            ReleaseJobResources();
         }
 
+        private unsafe void GenerateLightsConstantBuffers(CommandBuffer cmdBuffer)
+        {
+            float4[] lightBuffer = new float4[ShaderIdsAndConstants.ConstBuf_LightBuffer_EntriesCount];
+            int4[] lightIndexListBuffer = new int4[ShaderIdsAndConstants.MaxConstantBufferEntriesCount];
+
+            for (int i = 0; i < _lights.Length; ++i)
+            {
+                DataTypes.Light light = _lights[i];
+                if (light.type == EnumDef.LightType.Directional)
+                {
+                    lightBuffer[ShaderIdsAndConstants.PropOffset_LightDirectionsOrPositions + i] = light.worldDir;
+                    lightBuffer[ShaderIdsAndConstants.PropOffset_LightAttenuations + i] = float4.zero;
+                }
+                else if (light.type == EnumDef.LightType.Point)
+                {
+                    lightBuffer[ShaderIdsAndConstants.PropOffset_LightDirectionsOrPositions + i] = light.worldPos;
+                    lightBuffer[ShaderIdsAndConstants.PropOffset_LightAttenuations + i] = float4(1f / Mathf.Max(light.range * light.range, 0.00001f), 0.0f, 0.0f, 0.0f);
+                }
+
+                lightBuffer[ShaderIdsAndConstants.PropOffset_LightColors + i] = float4(light.color.r, light.color.g, light.color.b, light.color.a);
+            }
+
+            int currentListIndex = 0;
+            
+            for (int i = 0; i < _frustumsCount && i < ShaderIdsAndConstants.MaxFrustumsCount; ++i)
+            {
+                int gridStartIndex = currentListIndex;
+                int gridLightsCount = 0;
+                
+                if (_frustumLightIndexes.TryGetFirstValue(i, out var lightIndex, out var it))
+                {
+                    do
+                    {
+                        lightIndexListBuffer[currentListIndex / 4][currentListIndex % 4] = lightIndex;
+                        ++currentListIndex;
+                        ++gridLightsCount;
+                        
+                        if (currentListIndex >= ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count)
+                            break;
+                    } while (_frustumLightIndexes.TryGetNextValue(out lightIndex, ref it));
+                }
+
+                lightBuffer[ShaderIdsAndConstants.PropOffset_FrustumLightGrids + i] = int4(gridStartIndex, gridLightsCount, 0, 0);
+                
+                if (currentListIndex >= ShaderIdsAndConstants.MaxConstantBufferEntriesCount)
+                    break;
+            }
+
+            _cbLightBuffer.SetData(lightBuffer);
+            _cbLightIndexListBuffer.SetData(lightIndexListBuffer);
+
+            cmdBuffer.SetGlobalConstantBuffer(_cbLightBuffer, ShaderIdsAndConstants.ConstBufId_LightBufferId, 0, ShaderIdsAndConstants.ConstBuf_LightBuffer_Size);
+            cmdBuffer.SetGlobalConstantBuffer(_cbLightIndexListBuffer, ShaderIdsAndConstants.ConstBufId_LightIndexListBufferId, 0, ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Size);
+            
+            cmdBuffer.SetGlobalInt(ShaderIdsAndConstants.PropId_LightsCountId, _lightsCount);
+        }
+        
         public override void Dispose()
         {
-            jobHandle.Complete();
-            ReleaseResources();
+            _jobHandle.Complete();
 
-            if (viewFrustums.IsCreated)
+            ReleaseConstantBuffers();
+            ReleaseJobResources();
+
+            if (_viewFrustums.IsCreated)
             {
-                viewFrustums.Dispose();
+                _viewFrustums.Dispose();
             }
         }
     }

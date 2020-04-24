@@ -14,12 +14,17 @@ namespace MyRenderPipeline
         }
 
         private Camera lastRenderCamera;
-        
         IDictionary<Camera, IPipelineRenderer> cameraRendererDic = new Dictionary<Camera, IPipelineRenderer>();
 
-        public MyRenderPipeline()
+        private bool useDynamicBatching;
+        private bool useGPUInstancing;
+
+        public MyRenderPipeline(bool useDynamicBatching, bool useGPUInstancing, bool useSRPBatcher)
         {
-            Debug.Log("Create Render Pipeline.");
+            this.useDynamicBatching = useDynamicBatching;
+            this.useGPUInstancing = useGPUInstancing;
+            GraphicsSettings.useScriptableRenderPipelineBatching = useSRPBatcher;
+            GraphicsSettings.lightsUseLinearIntensity = true;
         }
 
         protected override void Render(ScriptableRenderContext context, Camera[] cameras)
@@ -33,7 +38,7 @@ namespace MyRenderPipeline
                 IPipelineRenderer renderer;
                 if(!cameraRendererDic.TryGetValue(cam, out renderer))
                 {
-                        renderer = new ForwardPlusRenderer();
+                        renderer = new ForwardPlusRenderer(useDynamicBatching, useGPUInstancing);
                         cameraRendererDic.Add(cam, renderer);
                         renderer.Setup(context, cam);
                 }

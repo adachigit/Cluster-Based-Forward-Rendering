@@ -135,6 +135,11 @@ namespace MyRenderPipeline
             cbClusterAABBs.GetData(clusterAABBsData);
         }
         
+        public override void BeforeCulling(ref ScriptableCullingParameters param)
+        {
+            param.maximumVisibleLights = maxLightsCount;
+        }
+
         public override void BeforeRender(Camera camera, ScriptableRenderContext context, CullingResults cullingResults)
         {
             if ((int) screenDimension.x != camera.scaledPixelWidth || (int) screenDimension.y != camera.scaledPixelHeight)
@@ -147,7 +152,7 @@ namespace MyRenderPipeline
             }
         }
 
-        public override void AfterRender()
+        public override void AfterRender(Camera camera, ScriptableRenderContext context)
         {
         }
 

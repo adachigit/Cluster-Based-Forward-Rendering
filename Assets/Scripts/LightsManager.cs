@@ -63,7 +63,7 @@ public class LightsManager : MonoBehaviour
             l.type = LightType.Point;
             l.range = Random.Range(1.0f, 2.0f);
             l.color = new Color(Random.Range(0.0f, 1.0f), Random.Range(0.0f, 1.0f), Random.Range(0.0f, 1.0f));
-            l.intensity = Random.Range(1.0f, 3.0f);
+            l.intensity = Random.Range(1.0f, 5.0f);
 
             go.transform.parent = m_LightsGroupObject.transform;
         }

@@ -12,10 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 149690ce1b8ca4d36b7375bb486726f2, type: 3}
   m_Name: ForwardPlusRendererData
   m_EditorClassIdentifier: 
-  clusterBlockGridSize: 32
+  clusterBlockGridSize: 64
   clusterFarPlane: 500
   defaultCullFarPlane: 200
-  defaultMaxLightsCount: 1024
+  defaultMaxLightsCount: 512
   defaultMaxLightsCountPerCluster: 64
   defaultFov: 0
   clusterAABBComputerShader: {fileID: 7200000, guid: b108a207de6bada4dae6d131d039ef49,

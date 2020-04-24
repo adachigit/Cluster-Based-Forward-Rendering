@@ -15,6 +15,11 @@ namespace MyRenderPipeline
             public ScriptablePipelineRendererData rendererData;
         }
 
+        [SerializeField] private bool useDynamicBatching = true;
+        [SerializeField] private bool useGPUInstancing = true;
+        [SerializeField] private bool useSRPBatcher = true;
+        
+
         public List<RendererDataInfo> rendererDataInfos;
 
         public T GetRendererData<T>(MyRenderPipeline.RendererType type) where T : ScriptablePipelineRendererData
@@ -32,7 +37,7 @@ namespace MyRenderPipeline
 
         protected override RenderPipeline CreatePipeline()
         {
-            return new MyRenderPipeline();
+            return new MyRenderPipeline(useDynamicBatching, useGPUInstancing, useSRPBatcher);
         }
     }
 }

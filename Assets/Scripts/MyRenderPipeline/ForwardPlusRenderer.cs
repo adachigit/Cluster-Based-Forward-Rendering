@@ -16,7 +16,7 @@ namespace MyRenderPipeline
         const string CMB_BUFFER_NAME = "Forward+ Render";
 
         static ShaderTagId unlitShaderTagId = new ShaderTagId("SRPDefaultUnlit");
-        static ShaderTagId fwdPlusShaderTagId = new ShaderTagId("SRPFwdPlusLit");
+        static ShaderTagId litShaderTagId = new ShaderTagId("SRPDefaultLit");
         
         CommandBuffer cmdBuffer = new CommandBuffer() {
             name = CMB_BUFFER_NAME
@@ -35,6 +35,15 @@ namespace MyRenderPipeline
         private CameraType cameraType;
         private bool debug;
 
+        private bool useDynamicBatching;
+        private bool useGPUInstancing;
+        
+        public ForwardPlusRenderer(bool useDynamicBatching, bool useGPUInstancing)
+        {
+            this.useDynamicBatching = useDynamicBatching;
+            this.useGPUInstancing = useGPUInstancing;
+        }
+        
         public void Setup(ScriptableRenderContext context, Camera camera)
         {
             this.camera = camera;
@@ -57,9 +66,11 @@ namespace MyRenderPipeline
             Setup();
             DrawVisibleGeometry();
             DrawGizmos();
+            
+            JobsAfterRender(camera, context);
+            
             Submit();
             
-            JobsAfterRender();
         }
 
         // 设置
@@ -79,6 +90,7 @@ namespace MyRenderPipeline
         {
             if(camera.TryGetCullingParameters(out ScriptableCullingParameters p))
             {
+                lightsCullingJob.BeforeCulling(ref p);
                 cullingResults = context.Cull(ref p);
 
                 return true;
@@ -91,8 +103,16 @@ namespace MyRenderPipeline
         void DrawVisibleGeometry()
         {
             //draw opaque geometry
-            var sortingSettings = new SortingSettings(camera);
-            var drawSettings = new DrawingSettings(unlitShaderTagId, sortingSettings);
+            var sortingSettings = new SortingSettings(camera)
+            {
+                criteria = SortingCriteria.CommonOpaque,
+            };
+            var drawSettings = new DrawingSettings(unlitShaderTagId, sortingSettings)
+            {
+                enableDynamicBatching = useDynamicBatching,
+                enableInstancing = useGPUInstancing,
+            };
+            drawSettings.SetShaderPassName(1, litShaderTagId);
             var filteringSettings = new FilteringSettings(RenderQueueRange.opaque);
             context.DrawRenderers(cullingResults, ref drawSettings, ref filteringSettings);
             
@@ -131,9 +151,9 @@ namespace MyRenderPipeline
             lightsCullingJob.BeforeRender(camera, context, cullingResults);
         }
 
-        private void JobsAfterRender()
+        private void JobsAfterRender(Camera camera, ScriptableRenderContext context)
         {
-            lightsCullingJob.AfterRender();
+            lightsCullingJob.AfterRender(camera, context);
         }
 
         private void DisposeAllJobs()
