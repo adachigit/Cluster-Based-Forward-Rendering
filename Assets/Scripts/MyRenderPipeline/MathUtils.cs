@@ -45,7 +45,7 @@ namespace MyRenderPipeline
          */
         public static bool PointBehindPlane(float3 point, DataTypes.Plane plane)
         {
-            return dot(plane.normal.xyz, point) - plane.distance < 0;
+            return dot(plane.normal.xyz, point) - plane.distance <= 0;
         }
         
         /**
@@ -61,7 +61,7 @@ namespace MyRenderPipeline
          */
         public static bool SphereInsectPlane(DataTypes.Sphere sphere, DataTypes.Plane plane)
         {
-            return abs(dot(plane.normal, sphere.center) - plane.distance) <= sphere.radius;
+            return abs(dot(plane.normal, sphere.center) - plane.distance) < sphere.radius;
         }
 
         /**

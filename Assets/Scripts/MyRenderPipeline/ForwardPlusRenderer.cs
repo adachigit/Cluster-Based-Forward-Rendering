@@ -67,10 +67,9 @@ namespace MyRenderPipeline
             DrawVisibleGeometry();
             DrawGizmos();
             
-            JobsAfterRender(camera, context);
-            
             Submit();
             
+            JobsAfterRender(camera, context, cullingResults);
         }
 
         // 设置
@@ -151,9 +150,9 @@ namespace MyRenderPipeline
             lightsCullingJob.BeforeRender(camera, context, cullingResults);
         }
 
-        private void JobsAfterRender(Camera camera, ScriptableRenderContext context)
+        private void JobsAfterRender(Camera camera, ScriptableRenderContext context, CullingResults cullingResults)
         {
-            lightsCullingJob.AfterRender(camera, context);
+            lightsCullingJob.AfterRender(camera, context, cullingResults);
         }
 
         private void DisposeAllJobs()

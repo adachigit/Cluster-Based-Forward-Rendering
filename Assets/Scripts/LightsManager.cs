@@ -22,7 +22,7 @@ public class LightsManager : MonoBehaviour
     /// </summary>
     void Start()
     {
-        MinZ = m_Camera.nearClipPlane + (m_Camera.farClipPlane - m_Camera.nearClipPlane) / 5.0f;
+        MinZ = m_Camera.nearClipPlane;// + (m_Camera.farClipPlane - m_Camera.nearClipPlane) / 5.0f;
         MaxZ = m_Camera.farClipPlane;
 
         MinY = 0.0f;//m_Camera.nearClipPlane * Mathf.Tan(m_Camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
@@ -63,7 +63,7 @@ public class LightsManager : MonoBehaviour
             l.type = LightType.Point;
             l.range = Random.Range(1.0f, 2.0f);
             l.color = new Color(Random.Range(0.0f, 1.0f), Random.Range(0.0f, 1.0f), Random.Range(0.0f, 1.0f));
-            l.intensity = Random.Range(1.0f, 5.0f);
+            l.intensity = Random.Range(1.0f, 2.0f);
 
             go.transform.parent = m_LightsGroupObject.transform;
         }

@@ -38,20 +38,21 @@ float3 GetLightingByScreenCoord(Surface surface, float2 screenCoord)
     int lightCount = (int)lightGrid.y;
 
     float3 lighting = 0;
+//    [unroll(MAX_LIGHTS_PER_FRUSTUM_COUNT)]
     for(int i = 0; i < lightCount; ++i)
     {
         int listIndex = indexListStartIndex + i;
         lighting += GetLighting(surface, _LightIndexList[listIndex / 4][listIndex % 4]);
     }
-    
-//    if(frustumIndex >= 1)
-//        return float3(1, 0, 0);
-    
-    return lighting;//GetLighting(surface, _LightIndexList[indexListStartIndex / 4][indexListStartIndex % 4]);
-//    return _LightColors[_LightIndexList[indexListStartIndex / 4][indexListStartIndex % 4]].rgb;
-//    return _LightColors[_LightIndexList[50][0]].rgb;
-//    return float3((float)frustumIndex / _FrustumParams.w, 0, 0);
-//    return float3((float)lightCount / MAX_LIGHTS_PER_FRUSTUM_COUNT, 0, 0);
+/*    
+    if(lightCount <= 16)
+        return float3(0, 0, 0.4) + lighting;
+    if(lightCount <= 24)
+        return float3(0, 0.4, 0) + lighting;
+    else
+        return float3(0.4, 0, 0) + lighting;
+*/    
+    return lighting;
 }
 
 #endif

@@ -649,7 +649,7 @@ Light:
   m_Type: 1
   m_Shape: 0
   m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_Intensity: 1
+  m_Intensity: 1.72
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -1010,7 +1010,7 @@ Camera:
     width: 1
     height: 1
   near clip plane: 0.3
-  far clip plane: 30
+  far clip plane: 25
   field of view: 60
   orthographic: 0
   orthographic size: 5
@@ -1056,7 +1056,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cullFarPlane: 30
-  clusterGridBlockSize: 0
+  clusterGridBlockSize: 64
   maxLightsCount: 0
   maxLightsCountPerCluster: 0
   debug: 1
@@ -1599,7 +1599,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1425103935
 RectTransform:
   m_ObjectHideFlags: 0

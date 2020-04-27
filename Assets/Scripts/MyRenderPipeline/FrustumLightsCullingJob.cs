@@ -42,6 +42,9 @@ namespace MyRenderPipeline
         
         public float4x4 inverseProjectionMat { get; set; }
 
+        // For Debug Start
+        // For Debug End
+        
         public FrustumLightsCullingJob(int jobBatchCount = 8)
         {
             this._jobBatchCount = jobBatchCount;
@@ -137,7 +140,7 @@ namespace MyRenderPipeline
             {
                 DataTypes.Frustum frustum = frustums[index];
                 short lightCount = 0;
-
+                
                 for (short i = 0; i < lights.Length; ++i)
                 {
                     var light = lights[i];
@@ -219,7 +222,7 @@ namespace MyRenderPipeline
                 _lights.Dispose();
             }
 
-            Matrix4x4 worldToViewMat = camera.transform.worldToLocalMatrix;
+            Matrix4x4 worldToViewMat = camera.worldToCameraMatrix;
             _lightsCount = cullingResults.visibleLights.Length > _maxLightsCount ? _maxLightsCount : cullingResults.visibleLights.Length;
             _lights = new NativeArray<DataTypes.Light>(_lightsCount, Allocator.TempJob);
 
@@ -315,7 +318,7 @@ namespace MyRenderPipeline
             }
 
             CollectVisibleLights(camera, cullingResults);
-            
+
             _frustumLightIndexes = new NativeMultiHashMap<int, short>(_frustumsCount * _maxLightsCountPerFrustum, Allocator.TempJob);
 
             var job = new LightsCullingParallelFor
@@ -361,7 +364,7 @@ namespace MyRenderPipeline
             }
         }
         
-        public override void AfterRender(Camera camera, ScriptableRenderContext context)
+        public override void AfterRender(Camera camera, ScriptableRenderContext context, CullingResults cullingResults)
         {
             _jobHandle.Complete();
 
@@ -410,14 +413,14 @@ namespace MyRenderPipeline
                         ++currentListIndex;
                         ++gridLightsCount;
                         
-                        if (currentListIndex >= ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count)
+                        if (currentListIndex >= ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count * 4)
                             break;
                     } while (_frustumLightIndexes.TryGetNextValue(out lightIndex, ref it));
                 }
 
                 lightBuffer[ShaderIdsAndConstants.PropOffset_FrustumLightGrids + i] = int4(gridStartIndex, gridLightsCount, 0, 0);
                 
-                if (currentListIndex >= ShaderIdsAndConstants.MaxConstantBufferEntriesCount)
+                if (currentListIndex >= ShaderIdsAndConstants.MaxConstantBufferEntriesCount * 4)
                     break;
             }
 

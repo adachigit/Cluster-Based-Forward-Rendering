@@ -9,7 +9,7 @@ namespace MyRenderPipeline
         public abstract void Init(Camera camera, ScriptableRenderContext content);
         public abstract void BeforeCulling(ref ScriptableCullingParameters param);
         public abstract void BeforeRender(Camera camera, ScriptableRenderContext context, CullingResults cullingResults);
-        public abstract void AfterRender(Camera camera, ScriptableRenderContext context);
+        public abstract void AfterRender(Camera camera, ScriptableRenderContext context, CullingResults cullingResults);
         public abstract void Dispose();
     }
 }

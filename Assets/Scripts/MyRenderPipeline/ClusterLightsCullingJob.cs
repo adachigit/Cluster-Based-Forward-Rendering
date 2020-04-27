@@ -152,7 +152,7 @@ namespace MyRenderPipeline
             }
         }
 
-        public override void AfterRender(Camera camera, ScriptableRenderContext context)
+        public override void AfterRender(Camera camera, ScriptableRenderContext context, CullingResults cullingResults)
         {
         }
 
