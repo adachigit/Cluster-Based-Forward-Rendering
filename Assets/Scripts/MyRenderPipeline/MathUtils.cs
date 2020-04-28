@@ -43,7 +43,7 @@ namespace MyRenderPipeline
         /**
          * 点是否在平面的背面（平面法线指向为平面正面）
          */
-        public static bool PointBehindPlane(float3 point, DataTypes.Plane plane)
+        public static bool PointBehindPlane(ref float3 point, ref DataTypes.Plane plane)
         {
             return dot(plane.normal.xyz, point) - plane.distance <= 0;
         }
@@ -51,11 +51,28 @@ namespace MyRenderPipeline
         /**
          * 球体是否在平面的背面（平面法线指向为平面正面）
          */
-        public static bool SphereBehindPlane(DataTypes.Sphere sphere, DataTypes.Plane plane)
+        public static bool SphereBehindPlane(ref DataTypes.Sphere sphere, ref DataTypes.Plane plane)
         {
             return dot(plane.normal, sphere.center) - plane.distance < -sphere.radius;
         }
 
+        /**
+         * 球体是否在棱锥体内
+         */
+        public static bool SphereInsideFrustum(ref DataTypes.Sphere sphere, ref DataTypes.Frustum frustum)
+        {
+            if (SphereBehindPlane(ref sphere, ref frustum.planeLeft))
+                return false;
+            if (SphereBehindPlane(ref sphere, ref frustum.planeRight))
+                return false;
+            if (SphereBehindPlane(ref sphere, ref frustum.planeTop))
+                return false;
+            if (SphereBehindPlane(ref sphere, ref frustum.planeBottom))
+                return false;
+
+            return true;
+        }
+        
         /**
          * 球体是否与平面相交
          */
@@ -65,14 +82,29 @@ namespace MyRenderPipeline
         }
 
         /**
-         * 锥体是否在平面的背面
+         * 圆锥体是否在平面的背面
          */
-        public static bool ConeBehindPlane(DataTypes.Cone cone, DataTypes.Plane plane)
+        public static bool ConeBehindPlane(ref DataTypes.Cone cone, ref DataTypes.Plane plane)
         {
+            float3 pos = cone.pos.xyz;
             float3 m = cross(cross(plane.normal.xyz, cone.direction.xyz), cone.direction.xyz);
             float3 Q = cone.pos.xyz + cone.direction.xyz * cone.height + m * cone.radius;
 
-            return PointBehindPlane(cone.pos.xyz, plane) && PointBehindPlane(Q, plane);
+            return PointBehindPlane(ref pos, ref plane) && PointBehindPlane(ref Q, ref plane);
+        }
+
+        public static bool ConeInsideFrustum(ref DataTypes.Cone cone, ref DataTypes.Frustum frustum)
+        {
+            if (ConeBehindPlane(ref cone, ref frustum.planeLeft))
+                return false;
+            if (ConeBehindPlane(ref cone, ref frustum.planeRight))
+                return false;
+            if (ConeBehindPlane(ref cone, ref frustum.planeTop))
+                return false;
+            if (ConeBehindPlane(ref cone, ref frustum.planeBottom))
+                return false;
+            
+            return true;
         }
     }
 }
