@@ -14,26 +14,29 @@ namespace MyRenderPipeline
 {
     public class FrustumLightsCullingJob : BaseRendererJob
     {
+        //persistent job data
         private NativeArray<DataTypes.Frustum> _viewFrustums;
+        //temp job data
         private NativeArray<DataTypes.Light> _lights;
+        private NativeArray<int> _frustumLightsCount;
         private NativeMultiHashMap<int, short> _frustumLightIndexes;
-        private int _lightsCount;
-
+        
         private readonly CommandBuffer _cmdBuffer = new CommandBuffer()
         {
             name = "FrustumLightsCulling",
         };
 
+        //constant buffer data
         private NativeArray<float4> _nativeLightBufferArray;
         private NativeArray<int4> _nativeIndexListBufferArray;
-        
         private ComputeBuffer _cbLightBuffer;
         private ComputeBuffer _cbLightIndexListBuffer;
         
         private JobHandle _jobHandle;
         
         private int2 _screenDimension;
-        
+        private int _lightsCount;
+
         private int _gridSize;
         private int _frustumsCount;
         private int _frustumsCountVertical;
@@ -129,58 +132,8 @@ namespace MyRenderPipeline
                 distance = dot(n, p0),
             };
         }
-        
-        private void CollectVisibleLights(Camera camera, CullingResults cullingResults)
-        {
-            if (_lights.IsCreated)
-            {
-                _lights.Dispose();
-            }
 
-            Matrix4x4 worldToViewMat = camera.worldToCameraMatrix;
-            _lightsCount = cullingResults.visibleLights.Length > _maxLightsCount ? _maxLightsCount : cullingResults.visibleLights.Length;
-            _lights = new NativeArray<DataTypes.Light>(_lightsCount, Allocator.TempJob);
-
-            for (int i = 0; i < _lightsCount; ++i)
-            {
-                VisibleLight visibleLight = cullingResults.visibleLights[i];
-                var light = new DataTypes.Light();
-
-                switch (visibleLight.lightType)
-                {
-                case LightType.Directional:
-                    light.type = EnumDef.LightType.Directional;
-                    light.worldDir = -visibleLight.localToWorldMatrix.GetColumn(2);
-                    light.viewDir = mul(worldToViewMat, -visibleLight.localToWorldMatrix.GetColumn(2));
-                    light.color = visibleLight.finalColor;
-                    break;
-                case LightType.Point:
-                    light.type = EnumDef.LightType.Point;
-                    light.worldPos = visibleLight.localToWorldMatrix.GetColumn(3);
-                    light.viewPos = mul(worldToViewMat, visibleLight.localToWorldMatrix.GetColumn(3));
-                    light.range = visibleLight.range;
-                    light.color = visibleLight.finalColor;
-                    break;
-                case LightType.Spot:
-                    light.type = EnumDef.LightType.Spot;
-                    light.worldPos = visibleLight.localToWorldMatrix.GetColumn(3);
-                    light.viewPos = mul(worldToViewMat, visibleLight.localToWorldMatrix.GetColumn(3));
-                    light.worldDir = visibleLight.localToWorldMatrix.GetColumn(2);
-                    light.viewDir = mul(worldToViewMat, visibleLight.localToWorldMatrix.GetColumn(2));
-                    light.range = visibleLight.range;
-                    light.halfAngle = visibleLight.spotAngle * 0.5f;
-                    light.radius = tan(radians(light.halfAngle));
-                    light.color = visibleLight.finalColor;
-                    break;
-                default:
-                    continue;
-                }
-
-                _lights[i] = light;
-            }
-        }
-
-        [BurstCompile]
+        [BurstCompile(CompileSynchronously = true)]
         struct LightsCollectJob : IJob
         {
             [ReadOnly]
@@ -231,48 +184,52 @@ namespace MyRenderPipeline
             }
         }
         
-        [BurstCompile]
+        [BurstCompile(CompileSynchronously = true)]
         struct LightsCullingParallelFor : IJobParallelFor
         {
             [ReadOnly] public NativeArray<DataTypes.Light> lights;
             [ReadOnly] public NativeArray<DataTypes.Frustum> frustums;
-            public NativeMultiHashMap<int, short>.ParallelWriter lightsCountAndIndexes;
+            public NativeMultiHashMap<int, short>.ParallelWriter lightIndexes;
+            public NativeArray<int> frustumLightCount;
 
-            public int maxLightsCount;
+            public int lightsCount;
+            public int maxLightsCountPerFrustum;
 
             public void Execute(int index)
             {
                 DataTypes.Frustum frustum = frustums[index];
                 short lightCount = 0;
                 
-                for (short i = 0; i < lights.Length; ++i)
+                for (short i = 0; i < lightsCount; ++i)
                 {
                     var light = lights[i];
                     switch (light.type)
                     {
                         case EnumDef.LightType.Directional:
-                            lightsCountAndIndexes.Add(index, i);
+                            lightIndexes.Add(index, i);
                             ++lightCount;
                             break;
                         case EnumDef.LightType.Point:
                             if (PointLightInFrustum(ref frustum, ref light))
                             {
-                                lightsCountAndIndexes.Add(index, i);
+                                lightIndexes.Add(index, i);
                                 ++lightCount;
                             }
                             break;
                         case EnumDef.LightType.Spot:
                             if (SpotLightInFrustum(ref frustum, ref light))
                             {
-                                lightsCountAndIndexes.Add(index, i);
+                                lightIndexes.Add(index, i);
                                 ++lightCount;
                             }
                             break;
                     }
 
-                    if (lightCount >= maxLightsCount)
+                    if (lightCount >= maxLightsCountPerFrustum)
                         break;
                 }
+
+                frustumLightCount[index] = lightCount;
             }
             
             private bool PointLightInFrustum(ref DataTypes.Frustum frustum, ref DataTypes.Light light)
@@ -300,11 +257,73 @@ namespace MyRenderPipeline
             }
         }
 
+        [BurstCompile(CompileSynchronously = true)]
+        struct GenerateLightsCBDatasJob : IJob
+        {
+            public NativeArray<float4> lightBufferArray;
+            public NativeArray<int4> indexListBufferArray;
+
+            [ReadOnly]
+            public NativeArray<DataTypes.Light> lights;
+            [ReadOnly]
+            public NativeMultiHashMap<int, short> frustumLightIndexes;
+            [ReadOnly]
+            public NativeArray<int> frustumLightsCount;
+
+            public int lightDirOrPosBufferOffset;
+            public int lightAttenBufferOffset;
+            public int lightColorsBufferOffset;
+            public int frustumGridBufferOffset;
+            public int indexListEntriesCount;
+
+            public void Execute()
+            {
+                //Generate lights constant buffer
+                for (int i = 0; i < lights.Length; ++i)
+                {
+                    DataTypes.Light light = lights[i];
+                    if (light.type == EnumDef.LightType.Directional)
+                    {
+                        lightBufferArray[lightDirOrPosBufferOffset + i] = light.worldDir;
+                        lightBufferArray[lightAttenBufferOffset + i] = float4.zero;
+                    }
+                    else if (light.type == EnumDef.LightType.Point)
+                    {
+                        lightBufferArray[lightDirOrPosBufferOffset + i] = light.worldPos;
+                        lightBufferArray[lightAttenBufferOffset + i] = float4(1f / Mathf.Max(light.range * light.range, 0.00001f), 0.0f, 0.0f, 0.0f);
+                    }
+
+                    lightBufferArray[lightColorsBufferOffset + i] = float4(light.color.r, light.color.g, light.color.b, light.color.a);
+                }
+
+                int currentListIndex = 0;
+                for (int i = 0; i < frustumLightsCount.Length; ++i)
+                {
+                    int lightCount = frustumLightsCount[i];
+                    lightBufferArray[frustumGridBufferOffset + i] = int4(currentListIndex, lightCount, 0, 0);
+
+                    var ite = frustumLightIndexes.GetValuesForKey(i);
+                    while (ite.MoveNext())
+                    {
+                        int4 entry = indexListBufferArray[currentListIndex / 4];
+                        entry[currentListIndex % 4] = ite.Current;
+                        indexListBufferArray[currentListIndex / 4] = entry;
+
+                        ++currentListIndex;
+                        if (currentListIndex >= indexListEntriesCount * 4)
+                            break;
+                    }
+                    
+                    if (currentListIndex >= indexListEntriesCount * 4)
+                        break;
+                }
+            }
+        }
+            
         public override void Init(Camera camera, ScriptableRenderContext content)
         {
             NativeLeakDetection.Mode = NativeLeakDetectionMode.EnabledWithStackTrace;
             
-            InitJobPersistentBuffers();
             InitConstantBuffers(_cmdBuffer);
         }
 
@@ -345,6 +364,9 @@ namespace MyRenderPipeline
                 ReloadRendererConfigure(camera);
                 BuildViewFrustums();
                 
+                ReleaseJobNativeContainers();
+                InitJobNativeContainers();
+                
                 _cmdBuffer.SetGlobalVector(ShaderIdsAndConstants.PropId_FrustumParamsId, new Vector4(_frustumsCountHorizontal, _frustumsCountVertical, _gridSize, _frustumsCount));
                 
                 context.ExecuteCommandBuffer(_cmdBuffer);
@@ -353,14 +375,9 @@ namespace MyRenderPipeline
                 Debug.Log($"Rebuild frustums. GirdSize is {_gridSize}, Frustums count is {_frustumsCount}, viewFrustums size is {_viewFrustums.Length}");
             }
 
-            if (_lights.IsCreated)
-            {
-                _lights.Dispose();
-            }
-
-            _lightsCount = cullingResults.visibleLights.Length > _maxLightsCount ? _maxLightsCount : cullingResults.visibleLights.Length;
-            _lights = new NativeArray<DataTypes.Light>(_lightsCount, Allocator.TempJob);
-
+            _lightsCount = cullingResults.visibleLights.Length;
+            _frustumLightIndexes.Clear();
+            
             var lightsCollectJob = new LightsCollectJob
             {
                 worldToViewMat = camera.worldToCameraMatrix,
@@ -369,29 +386,58 @@ namespace MyRenderPipeline
                 lights = _lights,
             };
             var collectJobHandle = lightsCollectJob.Schedule();
-            
-            _frustumLightIndexes = new NativeMultiHashMap<int, short>(_frustumsCount * _maxLightsCountPerFrustum, Allocator.TempJob);
 
-            var job = new LightsCullingParallelFor
+            var lightsCullingJob = new LightsCullingParallelFor
             {
                 lights = _lights,
+                lightsCount = _lightsCount,
                 frustums = _viewFrustums,
-                lightsCountAndIndexes = _frustumLightIndexes.AsParallelWriter(),
-                maxLightsCount = _maxLightsCountPerFrustum,
+                lightIndexes = _frustumLightIndexes.AsParallelWriter(),
+                frustumLightCount = _frustumLightsCount,
+                maxLightsCountPerFrustum = _maxLightsCountPerFrustum,
             };
-            _jobHandle = job.Schedule(_frustumsCount, _jobBatchCount, collectJobHandle);
+            var lightsCullingJobHandle = lightsCullingJob.Schedule(_frustumsCount, _jobBatchCount, collectJobHandle);
+
+            var generateCBJob = new GenerateLightsCBDatasJob
+            {
+                lightBufferArray = _nativeLightBufferArray,
+                indexListBufferArray = _nativeIndexListBufferArray,
+                lights = _lights,
+                frustumLightIndexes = _frustumLightIndexes,
+                frustumLightsCount = _frustumLightsCount,
+                
+                lightDirOrPosBufferOffset = ShaderIdsAndConstants.PropOffset_LightDirectionsOrPositions,
+                lightAttenBufferOffset = ShaderIdsAndConstants.PropOffset_LightAttenuations,
+                lightColorsBufferOffset = ShaderIdsAndConstants.PropOffset_LightColors,
+                frustumGridBufferOffset = ShaderIdsAndConstants.PropOffset_FrustumLightGrids,
+                indexListEntriesCount = ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count,
+            };
+            _jobHandle = generateCBJob.Schedule(lightsCullingJobHandle);
         }
 
-        private void InitJobPersistentBuffers()
+        public override void AfterRender(Camera camera, ScriptableRenderContext context, CullingResults cullingResults)
         {
-            _nativeLightBufferArray = new NativeArray<float4>(ShaderIdsAndConstants.ConstBuf_LightBuffer_EntriesCount, Allocator.Persistent);
-            _nativeIndexListBufferArray = new NativeArray<int4>(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, Allocator.Persistent);
+            _jobHandle.Complete();
+
+            _cbLightBuffer.SetData(_nativeLightBufferArray);
+            _cbLightIndexListBuffer.SetData(_nativeIndexListBufferArray);
+
+            _cmdBuffer.SetGlobalConstantBuffer(_cbLightBuffer, ShaderIdsAndConstants.ConstBufId_LightBufferId, 0, ShaderIdsAndConstants.ConstBuf_LightBuffer_Size);
+            _cmdBuffer.SetGlobalConstantBuffer(_cbLightIndexListBuffer, ShaderIdsAndConstants.ConstBufId_LightIndexListBufferId, 0, ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Size);
+            
+            _cmdBuffer.SetGlobalInt(ShaderIdsAndConstants.PropId_LightsCountId, _lightsCount);
+            
+            context.ExecuteCommandBuffer(_cmdBuffer);
+            _cmdBuffer.Clear();
         }
-        
+
         private unsafe void InitConstantBuffers(CommandBuffer cmdBuffer)
         {
             _cbLightBuffer = new ComputeBuffer(ShaderIdsAndConstants.ConstBuf_LightBuffer_EntriesCount, sizeof(float4), ComputeBufferType.Constant);
             _cbLightIndexListBuffer = new ComputeBuffer(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, sizeof(int4), ComputeBufferType.Constant);
+            
+            _nativeLightBufferArray = new NativeArray<float4>(ShaderIdsAndConstants.ConstBuf_LightBuffer_EntriesCount, Allocator.Persistent);
+            _nativeIndexListBufferArray = new NativeArray<int4>(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, Allocator.Persistent);
         }
 
         private void ReleaseConstantBuffers()
@@ -401,28 +447,30 @@ namespace MyRenderPipeline
                 _cbLightBuffer.Release();
                 _cbLightBuffer = null;
             }
-
             if (_cbLightIndexListBuffer != null)
             {
                 _cbLightIndexListBuffer.Release();
                 _cbLightIndexListBuffer = null;
             }
-        }
-
-        private void ReleaseJobPersistentBuffers()
-        {
+            
             if (_nativeLightBufferArray.IsCreated)
             {
                 _nativeLightBufferArray.Dispose();
             }
-
             if (_nativeIndexListBufferArray.IsCreated)
             {
                 _nativeIndexListBufferArray.Dispose();
             }
         }
+
+        private void InitJobNativeContainers()
+        {
+            _lights = new NativeArray<DataTypes.Light>(_maxLightsCount, Allocator.Persistent);
+            _frustumLightIndexes = new NativeMultiHashMap<int, short>(_frustumsCount * _maxLightsCountPerFrustum, Allocator.Persistent);
+            _frustumLightsCount = new NativeArray<int>(_frustumsCount, Allocator.Persistent);
+        }
         
-        private void ReleaseJobTempBuffers()
+        private void ReleaseJobNativeContainers()
         {
             if (_lights.IsCreated)
             {
@@ -432,98 +480,18 @@ namespace MyRenderPipeline
             {
                 _frustumLightIndexes.Dispose();
             }
+            if (_frustumLightsCount.IsCreated)
+            {
+                _frustumLightsCount.Dispose();
+            }
         }
         
-        public override void AfterRender(Camera camera, ScriptableRenderContext context, CullingResults cullingResults)
-        {
-            _jobHandle.Complete();
-
-//            GenerateLightsConstantBuffers(_cmdBuffer);
-            
-            context.ExecuteCommandBuffer(_cmdBuffer);
-            _cmdBuffer.Clear();
-            
-            ReleaseJobTempBuffers();
-        }
-
-        private unsafe void GenerateLightsConstantBuffers(CommandBuffer cmdBuffer)
-        {
-            float4[] lightBuffer = new float4[ShaderIdsAndConstants.ConstBuf_LightBuffer_EntriesCount];
-            int4[] lightIndexListBuffer = new int4[ShaderIdsAndConstants.MaxConstantBufferEntriesCount];
-
-            for (int i = 0; i < _lights.Length; ++i)
-            {
-                DataTypes.Light light = _lights[i];
-                if (light.type == EnumDef.LightType.Directional)
-                {
-                    lightBuffer[ShaderIdsAndConstants.PropOffset_LightDirectionsOrPositions + i] = light.worldDir;
-                    lightBuffer[ShaderIdsAndConstants.PropOffset_LightAttenuations + i] = float4.zero;
-                }
-                else if (light.type == EnumDef.LightType.Point)
-                {
-                    lightBuffer[ShaderIdsAndConstants.PropOffset_LightDirectionsOrPositions + i] = light.worldPos;
-                    lightBuffer[ShaderIdsAndConstants.PropOffset_LightAttenuations + i] = float4(1f / Mathf.Max(light.range * light.range, 0.00001f), 0.0f, 0.0f, 0.0f);
-                }
-
-                lightBuffer[ShaderIdsAndConstants.PropOffset_LightColors + i] = float4(light.color.r, light.color.g, light.color.b, light.color.a);
-            }
-
-            int currentListIndex = 0;
-            
-            for (int i = 0; i < _frustumsCount && i < ShaderIdsAndConstants.MaxFrustumsCount; ++i)
-            {
-                int gridStartIndex = currentListIndex;
-                int gridLightsCount = 0;
-                
-                if (_frustumLightIndexes.TryGetFirstValue(i, out var lightIndex, out var it))
-                {
-                    do
-                    {
-                        lightIndexListBuffer[currentListIndex / 4][currentListIndex % 4] = lightIndex;
-                        ++currentListIndex;
-                        ++gridLightsCount;
-                        
-                        if (currentListIndex >= ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count * 4)
-                            break;
-                    } while (_frustumLightIndexes.TryGetNextValue(out lightIndex, ref it));
-                }
-
-                lightBuffer[ShaderIdsAndConstants.PropOffset_FrustumLightGrids + i] = int4(gridStartIndex, gridLightsCount, 0, 0);
-                
-                if (currentListIndex >= ShaderIdsAndConstants.MaxConstantBufferEntriesCount * 4)
-                    break;
-            }
-
-            _cbLightBuffer.SetData(lightBuffer);
-            _cbLightIndexListBuffer.SetData(lightIndexListBuffer);
-
-            cmdBuffer.SetGlobalConstantBuffer(_cbLightBuffer, ShaderIdsAndConstants.ConstBufId_LightBufferId, 0, ShaderIdsAndConstants.ConstBuf_LightBuffer_Size);
-            cmdBuffer.SetGlobalConstantBuffer(_cbLightIndexListBuffer, ShaderIdsAndConstants.ConstBufId_LightIndexListBufferId, 0, ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Size);
-            
-            cmdBuffer.SetGlobalInt(ShaderIdsAndConstants.PropId_LightsCountId, _lightsCount);
-        }
-
-        [BurstCompile]
-        struct GenerateLightsCBDatasJob : IJob
-        {
-            public NativeArray<float4> lightBufferArray;
-            public NativeArray<int4> indexListBufferArray;
-
-            public NativeArray<DataTypes.Light> lights;
-            
-            public void Execute()
-            {
-                
-            }
-        }
-            
         public override void Dispose()
         {
             _jobHandle.Complete();
 
             ReleaseConstantBuffers();
-            ReleaseJobPersistentBuffers();
-            ReleaseJobTempBuffers();
+            ReleaseJobNativeContainers();
 
             if (_viewFrustums.IsCreated)
             {

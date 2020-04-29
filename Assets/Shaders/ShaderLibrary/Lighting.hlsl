@@ -27,6 +27,7 @@ float3 GetLightingByScreenCoord(Surface surface, float2 screenCoord)
 {
     int xFrustumIndex = floor(screenCoord.x / _FrustumParams.z);
     int yFrustumIndex = floor(screenCoord.y / _FrustumParams.z);
+    [branch]
     if(_ProjectionParams.x < 0) // If current projection matrix is flipped, then flips the yIndex.
     {
         yFrustumIndex = _FrustumParams.y - (yFrustumIndex + 1);
@@ -51,7 +52,7 @@ float3 GetLightingByScreenCoord(Surface surface, float2 screenCoord)
         return float3(0, 0.4, 0) + lighting;
     else
         return float3(0.4, 0, 0) + lighting;
-*/    
+*/
     return lighting;
 }
 

@@ -1,7 +1,9 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using Random = UnityEngine.Random;
 
 public class LightsManager : MonoBehaviour
 {
@@ -15,6 +17,11 @@ public class LightsManager : MonoBehaviour
     private float MaxY;
     private float MinX;
     private float MaxX;
+
+    private void Awake()
+    {
+        Screen.SetResolution(1280, 720, true);
+    }
 
     /// <summary>
     /// Start is called on the frame when a script is enabled just before
