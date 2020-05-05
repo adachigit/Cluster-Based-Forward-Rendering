@@ -27,11 +27,14 @@ float3 GetLightingByScreenCoord(Surface surface, float2 screenCoord)
 {
     int xFrustumIndex = floor(screenCoord.x / _FrustumParams.z);
     int yFrustumIndex = floor(screenCoord.y / _FrustumParams.z);
+    /*
     [branch]
-    if(_ProjectionParams.x < 0) // If current projection matrix is flipped, then flips the yIndex.
+    if(_ProjectionParams.x == -1.0) // If current projection matrix is flipped, then flips the yIndex.
     {
         yFrustumIndex = _FrustumParams.y - (yFrustumIndex + 1);
     }
+    */
+    yFrustumIndex = _ProjectionParams.x * yFrustumIndex + (_ProjectionParams.x - 1.0) / 2.0 * (1 - _FrustumParams.y);
     int frustumIndex = yFrustumIndex * _FrustumParams.x + xFrustumIndex;
     
     float4 lightGrid = _FrustumLightGrids[frustumIndex];
@@ -42,7 +45,7 @@ float3 GetLightingByScreenCoord(Surface surface, float2 screenCoord)
 //    [unroll(MAX_LIGHTS_PER_FRUSTUM_COUNT)]
     for(int i = 0; i < lightCount; ++i)
     {
-        int listIndex = indexListStartIndex + i;
+        uint listIndex = indexListStartIndex + i;
         lighting += GetLighting(surface, _LightIndexList[listIndex / 4][listIndex % 4]);
     }
 /*    
