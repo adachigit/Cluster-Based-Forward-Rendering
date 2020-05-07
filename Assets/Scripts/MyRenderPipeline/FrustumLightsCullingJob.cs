@@ -367,14 +367,15 @@ namespace MyRenderPipeline
                 ReleaseJobNativeContainers();
                 InitJobNativeContainers();
                 
-                _cmdBuffer.SetGlobalVector(ShaderIdsAndConstants.PropId_FrustumParamsId, new Vector4(_frustumsCountHorizontal, _frustumsCountVertical, _gridSize, _frustumsCount));
-                
-                context.ExecuteCommandBuffer(_cmdBuffer);
-                _cmdBuffer.Clear();
+//                context.ExecuteCommandBuffer(_cmdBuffer);
+//                _cmdBuffer.Clear();
                 
                 Debug.Log($"Rebuild frustums. GirdSize is {_gridSize}, Frustums count is {_frustumsCount}, viewFrustums size is {_viewFrustums.Length}");
             }
 
+            _jobHandle.Complete();
+            RefreshConstantBuffer(context);
+            
             _lightsCount = cullingResults.visibleLights.Length;
             _frustumLightIndexes.Clear();
             
@@ -385,7 +386,12 @@ namespace MyRenderPipeline
                 lightsCount = _lightsCount,
                 lights = _lights,
             };
-            var collectJobHandle = lightsCollectJob.Schedule();
+            _jobHandle = lightsCollectJob.Schedule();
+        }
+
+        public override void AfterRender(Camera camera, ScriptableRenderContext context, CullingResults cullingResults)
+        {
+            _jobHandle.Complete();
 
             var lightsCullingJob = new LightsCullingParallelFor
             {
@@ -396,7 +402,7 @@ namespace MyRenderPipeline
                 frustumLightCount = _frustumLightsCount,
                 maxLightsCountPerFrustum = _maxLightsCountPerFrustum,
             };
-            var lightsCullingJobHandle = lightsCullingJob.Schedule(_frustumsCount, _jobBatchCount, collectJobHandle);
+            var lightsCullingJobHandle = lightsCullingJob.Schedule(_frustumsCount, _jobBatchCount);
 
             var generateCBJob = new GenerateLightsCBDatasJob
             {
@@ -413,22 +419,6 @@ namespace MyRenderPipeline
                 indexListEntriesCount = ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count,
             };
             _jobHandle = generateCBJob.Schedule(lightsCullingJobHandle);
-        }
-
-        public override void AfterRender(Camera camera, ScriptableRenderContext context, CullingResults cullingResults)
-        {
-            _jobHandle.Complete();
-
-            _cbLightBuffer.SetData(_nativeLightBufferArray);
-            _cbLightIndexListBuffer.SetData(_nativeIndexListBufferArray);
-
-            _cmdBuffer.SetGlobalConstantBuffer(_cbLightBuffer, ShaderIdsAndConstants.ConstBufId_LightBufferId, 0, ShaderIdsAndConstants.ConstBuf_LightBuffer_Size);
-            _cmdBuffer.SetGlobalConstantBuffer(_cbLightIndexListBuffer, ShaderIdsAndConstants.ConstBufId_LightIndexListBufferId, 0, ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Size);
-            
-            _cmdBuffer.SetGlobalInt(ShaderIdsAndConstants.PropId_LightsCountId, _lightsCount);
-            
-            context.ExecuteCommandBuffer(_cmdBuffer);
-            _cmdBuffer.Clear();
         }
 
         private unsafe void InitConstantBuffers(CommandBuffer cmdBuffer)
@@ -463,6 +453,22 @@ namespace MyRenderPipeline
             }
         }
 
+        private void RefreshConstantBuffer(ScriptableRenderContext context)
+        {
+            _cbLightBuffer.SetData(_nativeLightBufferArray);
+            _cbLightIndexListBuffer.SetData(_nativeIndexListBufferArray);
+
+            _cmdBuffer.SetGlobalConstantBuffer(_cbLightBuffer, ShaderIdsAndConstants.ConstBufId_LightBufferId, 0, ShaderIdsAndConstants.ConstBuf_LightBuffer_Size);
+            _cmdBuffer.SetGlobalConstantBuffer(_cbLightIndexListBuffer, ShaderIdsAndConstants.ConstBufId_LightIndexListBufferId, 0, ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Size);
+            
+            _cmdBuffer.SetGlobalInt(ShaderIdsAndConstants.PropId_LightsCountId, _lightsCount);
+            
+            _cmdBuffer.SetGlobalVector(ShaderIdsAndConstants.PropId_FrustumParamsId, new Vector4(_frustumsCountHorizontal, _frustumsCountVertical, _gridSize, _frustumsCount));
+                
+            context.ExecuteCommandBuffer(_cmdBuffer);
+            _cmdBuffer.Clear();
+        }
+        
         private void InitJobNativeContainers()
         {
             _lights = new NativeArray<DataTypes.Light>(_maxLightsCount, Allocator.Persistent);

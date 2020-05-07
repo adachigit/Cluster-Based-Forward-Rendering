@@ -25,16 +25,20 @@ float3 GetLighting(Surface surface, int index)
 
 float3 GetLightingByScreenCoord(Surface surface, float2 screenCoord)
 {
-    int xFrustumIndex = floor(screenCoord.x / _FrustumParams.z);
-    int yFrustumIndex = floor(screenCoord.y / _FrustumParams.z);
-    /*
-    [branch]
-    if(_ProjectionParams.x == -1.0) // If current projection matrix is flipped, then flips the yIndex.
+    int screenX = screenCoord.x;
+    int screenY = screenCoord.y;
+    
+#if UNITY_UV_STARTS_AT_TOP
+    if(_ProjectionParams.x < 0)
     {
-        yFrustumIndex = _FrustumParams.y - (yFrustumIndex + 1);
+        screenY = _ScreenParams.y - screenY;
     }
-    */
-    yFrustumIndex = _ProjectionParams.x * yFrustumIndex + (_ProjectionParams.x - 1.0) / 2.0 * (1 - _FrustumParams.y);
+#else
+    screenY = _ScreenParams.y - screenY;
+#endif
+
+    int xFrustumIndex = floor(screenX / _FrustumParams.z);
+    int yFrustumIndex = floor(screenY / _FrustumParams.z);
     int frustumIndex = yFrustumIndex * _FrustumParams.x + xFrustumIndex;
     
     float4 lightGrid = _FrustumLightGrids[frustumIndex];
@@ -42,20 +46,13 @@ float3 GetLightingByScreenCoord(Surface surface, float2 screenCoord)
     int lightCount = (int)lightGrid.y;
 
     float3 lighting = 0;
-//    [unroll(MAX_LIGHTS_PER_FRUSTUM_COUNT)]
+    
     for(int i = 0; i < lightCount; ++i)
     {
         uint listIndex = indexListStartIndex + i;
         lighting += GetLighting(surface, _LightIndexList[listIndex / 4][listIndex % 4]);
     }
-/*    
-    if(lightCount <= 16)
-        return float3(0, 0, 0.4) + lighting;
-    if(lightCount <= 24)
-        return float3(0, 0.4, 0) + lighting;
-    else
-        return float3(0.4, 0, 0) + lighting;
-*/
+    
     return lighting;
 }
 

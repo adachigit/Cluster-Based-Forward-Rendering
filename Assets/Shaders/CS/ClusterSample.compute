@@ -1,6 +1,6 @@
 #pragma kernel CSMain
 
-#include "UnityCG.cginc"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
 #include "../Common/Common.hlsl"
 
 Texture2D<float4> _DepthTexture;

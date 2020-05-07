@@ -31,16 +31,16 @@ namespace MyRenderPipeline
         {
             foreach(var cam in cameras)
             {
-//                if (cam.gameObject.layer == LayerMask.NameToLayer("UI"))
-//                {
-//                    continue;
-//                }
+                if (cam.cameraType == CameraType.Preview || cam.cameraType == CameraType.Reflection || cam.cameraType == CameraType.VR)// == LayerMask.NameToLayer("UI"))
+                {
+                    continue;
+                }
                 IPipelineRenderer renderer;
                 if(!cameraRendererDic.TryGetValue(cam, out renderer))
                 {
-                        renderer = new ForwardPlusRenderer(useDynamicBatching, useGPUInstancing);
-                        cameraRendererDic.Add(cam, renderer);
-                        renderer.Setup(context, cam);
+                    renderer = new ForwardPlusRenderer(useDynamicBatching, useGPUInstancing);
+                    cameraRendererDic.Add(cam, renderer);
+                    renderer.Setup(context, cam);
                 }
 
                 renderer.Render(context, cam, lastRenderCamera);

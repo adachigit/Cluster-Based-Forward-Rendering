@@ -56,7 +56,7 @@ namespace MyRenderPipeline
         {
             this.context = context;
             this.camera = camera;
-
+            
             PrepareForSceneWindow();
             if(!Cull())
                 return;
@@ -66,10 +66,10 @@ namespace MyRenderPipeline
             Setup();
             DrawVisibleGeometry();
             DrawGizmos();
+
+            JobsAfterRender(camera, context, cullingResults);
             
             Submit();
-            
-            JobsAfterRender(camera, context, cullingResults);
         }
 
         // 设置
