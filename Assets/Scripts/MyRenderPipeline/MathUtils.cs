@@ -1,10 +1,17 @@
 using Unity.Mathematics;
+using UnityEngine;
 using static Unity.Mathematics.math;
+using float3 = Unity.Mathematics.float3;
 
 namespace MyRenderPipeline
 {
     public class MathUtils
     {
+        public static bool FloatEquals(float a, float b)
+        {
+            return Mathf.Abs(a - b) <= float.Epsilon;
+        }
+        
         /**
          * 通过屏幕空间坐标返回剪裁空间坐标，即将当前屏幕坐标转化到[-1.0, 1.0]范围内
          * screenDimension为屏幕分辨率
@@ -61,6 +68,10 @@ namespace MyRenderPipeline
          */
         public static bool SphereInsideFrustum(ref DataTypes.Sphere sphere, ref DataTypes.Frustum frustum)
         {
+            if (SphereBehindPlane(ref sphere, ref frustum.planeNear))
+                return false;
+            if (SphereBehindPlane(ref sphere, ref frustum.planeFar))
+                return false;
             if (SphereBehindPlane(ref sphere, ref frustum.planeLeft))
                 return false;
             if (SphereBehindPlane(ref sphere, ref frustum.planeRight))
@@ -95,6 +106,10 @@ namespace MyRenderPipeline
 
         public static bool ConeInsideFrustum(ref DataTypes.Cone cone, ref DataTypes.Frustum frustum)
         {
+            if (ConeBehindPlane(ref cone, ref frustum.planeNear))
+                return false;
+            if (ConeBehindPlane(ref cone, ref frustum.planeFar))
+                return false;
             if (ConeBehindPlane(ref cone, ref frustum.planeLeft))
                 return false;
             if (ConeBehindPlane(ref cone, ref frustum.planeRight))
@@ -105,6 +120,24 @@ namespace MyRenderPipeline
                 return false;
             
             return true;
+        }
+
+        //线段与平面是否相交，并求交点
+        public static void LineIntersectPlane(float3 startPoint, float3 endPoint, ref DataTypes.Plane plane, out float3 intersectPoint)
+        {
+            float3 v = endPoint - startPoint;
+            float t = (plane.distance - dot(plane.normal.xyz, startPoint)) / dot(plane.normal.xyz, v);
+
+            intersectPoint = startPoint + t * v;
+        }
+
+        public static int3 ComputeClusterIndex3D(int clusterIndex1D, ref int3 clusterGridDim)
+        {
+            int i = clusterIndex1D % clusterGridDim.x;
+            int j = clusterIndex1D % (clusterGridDim.x * clusterGridDim.y) / clusterGridDim.x;
+            int k = clusterIndex1D / (clusterGridDim.x * clusterGridDim.y);
+
+            return int3(i, j, k);
         }
     }
 }

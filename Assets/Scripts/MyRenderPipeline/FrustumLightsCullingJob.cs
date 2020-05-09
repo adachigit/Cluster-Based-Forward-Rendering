@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Unity.Burst;
 using Unity.Collections;
@@ -28,13 +29,30 @@ namespace MyRenderPipeline
 
         //constant buffer data
         private NativeArray<float4> _nativeLightBufferArray;
-        private NativeArray<int4> _nativeIndexListBufferArray;
         private ComputeBuffer _cbLightBuffer;
-        private ComputeBuffer _cbLightIndexListBuffer;
+        
+        private NativeArray<int4> _nativeIndexListBuffer1Array;
+        private NativeArray<int4> _nativeIndexListBuffer2Array;
+        private NativeArray<int4> _nativeIndexListBuffer3Array;
+        private NativeArray<int4> _nativeIndexListBuffer4Array;
+        private NativeArray<int4> _nativeIndexListBuffer5Array;
+        private NativeArray<int4> _nativeIndexListBuffer6Array;
+        private NativeArray<int4> _nativeIndexListBuffer7Array;
+        private NativeArray<int4> _nativeIndexListBuffer8Array;
+        private ComputeBuffer _cbLightIndexList1Buffer;
+        private ComputeBuffer _cbLightIndexList2Buffer;
+        private ComputeBuffer _cbLightIndexList3Buffer;
+        private ComputeBuffer _cbLightIndexList4Buffer;
+        private ComputeBuffer _cbLightIndexList5Buffer;
+        private ComputeBuffer _cbLightIndexList6Buffer;
+        private ComputeBuffer _cbLightIndexList7Buffer;
+        private ComputeBuffer _cbLightIndexList8Buffer;
         
         private JobHandle _jobHandle;
         
         private int2 _screenDimension;
+        private float _cameraZNear;
+        private float _cameraZFar;
         private int _lightsCount;
 
         private int _gridSize;
@@ -45,12 +63,9 @@ namespace MyRenderPipeline
         private int _maxLightsCount;
         private int _maxLightsCountPerFrustum;
         private readonly int _jobBatchCount;
-        
-        public float4x4 inverseProjectionMat { get; set; }
 
-        // For Debug Start
-        // For Debug End
-        
+        private float4x4 _inverseProjectionMat;
+
         public FrustumLightsCullingJob(int jobBatchCount = 8)
         {
             _jobBatchCount = jobBatchCount;
@@ -99,16 +114,18 @@ namespace MyRenderPipeline
 
             float3[] viewPos = new float3[]
             {
-                MathUtils.ScreenToView(screenPos[0], _screenDimension, inverseProjectionMat).xyz,
-                MathUtils.ScreenToView(screenPos[1], _screenDimension, inverseProjectionMat).xyz,
-                MathUtils.ScreenToView(screenPos[2], _screenDimension, inverseProjectionMat).xyz,
-                MathUtils.ScreenToView(screenPos[3], _screenDimension, inverseProjectionMat).xyz,
+                MathUtils.ScreenToView(screenPos[0], _screenDimension, _inverseProjectionMat).xyz,
+                MathUtils.ScreenToView(screenPos[1], _screenDimension, _inverseProjectionMat).xyz,
+                MathUtils.ScreenToView(screenPos[2], _screenDimension, _inverseProjectionMat).xyz,
+                MathUtils.ScreenToView(screenPos[3], _screenDimension, _inverseProjectionMat).xyz,
             };
             
             float3 eye = float3.zero;
 
             return new DataTypes.Frustum
             {
+                planeNear = new DataTypes.Plane { normal = float4(0f, 0f, -1f, 0f), distance = _cameraZNear },
+                planeFar = new DataTypes.Plane { normal = float4(0f, 0f, 1f, 0f), distance = -_cameraZFar },
                 planeLeft = BuildPlane(eye, viewPos[2], viewPos[0]),
                 planeRight = BuildPlane(eye, viewPos[1], viewPos[3]),
                 planeTop = BuildPlane(eye, viewPos[0], viewPos[1]),
@@ -261,7 +278,14 @@ namespace MyRenderPipeline
         struct GenerateLightsCBDatasJob : IJob
         {
             public NativeArray<float4> lightBufferArray;
-            public NativeArray<int4> indexListBufferArray;
+            public NativeArray<int4> indexListBuffer1Array;
+            public NativeArray<int4> indexListBuffer2Array;
+            public NativeArray<int4> indexListBuffer3Array;
+            public NativeArray<int4> indexListBuffer4Array;
+            public NativeArray<int4> indexListBuffer5Array;
+            public NativeArray<int4> indexListBuffer6Array;
+            public NativeArray<int4> indexListBuffer7Array;
+            public NativeArray<int4> indexListBuffer8Array;
 
             [ReadOnly]
             public NativeArray<DataTypes.Light> lights;
@@ -276,8 +300,14 @@ namespace MyRenderPipeline
             public int frustumGridBufferOffset;
             public int indexListEntriesCount;
 
+            private int _currentIndexArrayIndex;
+            private int _currentLightIndexInArray;
+
             public void Execute()
             {
+                _currentIndexArrayIndex = 0;
+                _currentLightIndexInArray = 0;
+                
                 //Generate lights constant buffer
                 for (int i = 0; i < lights.Length; ++i)
                 {
@@ -296,27 +326,70 @@ namespace MyRenderPipeline
                     lightBufferArray[lightColorsBufferOffset + i] = float4(light.color.r, light.color.g, light.color.b, light.color.a);
                 }
 
-                int currentListIndex = 0;
                 for (int i = 0; i < frustumLightsCount.Length; ++i)
                 {
                     int lightCount = frustumLightsCount[i];
-                    lightBufferArray[frustumGridBufferOffset + i] = int4(currentListIndex, lightCount, 0, 0);
+                    int indexArrayIndex = CheckLightIndexArrayIndex(lightCount);
+                    lightBufferArray[frustumGridBufferOffset + i] = int4(_currentLightIndexInArray, lightCount, indexArrayIndex, 0);
 
                     var ite = frustumLightIndexes.GetValuesForKey(i);
                     while (ite.MoveNext())
                     {
-                        int4 entry = indexListBufferArray[currentListIndex / 4];
-                        entry[currentListIndex % 4] = ite.Current;
-                        indexListBufferArray[currentListIndex / 4] = entry;
-
-                        ++currentListIndex;
-                        if (currentListIndex >= indexListEntriesCount * 4)
-                            break;
+                        AddLightIndex(ite.Current);
                     }
-                    
-                    if (currentListIndex >= indexListEntriesCount * 4)
-                        break;
                 }
+            }
+
+            private int CheckLightIndexArrayIndex(int appendLightCount)
+            {
+                if (_currentLightIndexInArray + appendLightCount > indexListEntriesCount)
+                {
+                    ++_currentIndexArrayIndex;
+                    _currentLightIndexInArray = 0;
+                }
+
+                return _currentIndexArrayIndex;
+            }
+
+            private void AddLightIndex(int lightIndex)
+            {
+                NativeArray<int4> tmpArray;
+
+                switch (_currentIndexArrayIndex)
+                { 
+                case 0:
+                    tmpArray = indexListBuffer1Array;
+                    break;
+                case 1:
+                    tmpArray = indexListBuffer2Array;
+                    break;
+                case 2:
+                    tmpArray = indexListBuffer3Array;
+                    break;
+                case 3:
+                    tmpArray = indexListBuffer4Array;
+                    break;
+                case 4:
+                    tmpArray = indexListBuffer5Array;
+                    break;
+                case 5:
+                    tmpArray = indexListBuffer6Array;
+                    break;
+                case 6:
+                    tmpArray = indexListBuffer7Array;
+                    break;
+                case 7:
+                    tmpArray = indexListBuffer8Array;
+                    break;
+                default:
+                    return;
+                }
+                
+                int4 entry = tmpArray[_currentLightIndexInArray / 4];
+                entry[_currentLightIndexInArray % 4] = lightIndex;
+                tmpArray[_currentLightIndexInArray / 4] = entry;
+
+                ++_currentLightIndexInArray;
             }
         }
             
@@ -335,15 +408,15 @@ namespace MyRenderPipeline
             ForwardPlusCameraData cameraData = camera.GetComponent<ForwardPlusCameraData>();
             if(cameraData != null)
             {
-                _gridSize = cameraData.clusterGridBlockSize > 0 ? cameraData.clusterGridBlockSize : rendererData.clusterBlockGridSize;
-                _maxLightsCount = cameraData.maxLightsCount > 0 ? cameraData.maxLightsCount : rendererData.defaultMaxLightsCount;
-                _maxLightsCountPerFrustum = cameraData.maxLightsCountPerCluster > 0 ? cameraData.maxLightsCountPerCluster : rendererData.defaultMaxLightsCountPerCluster;
+                _gridSize = cameraData.frustumGridSize > 0 ? cameraData.frustumGridSize : rendererData.frustumGridSize;
+                _maxLightsCount = cameraData.maxLightsCount > 0 ? cameraData.maxLightsCount : rendererData.maxLightsCount;
+                _maxLightsCountPerFrustum = cameraData.maxLightsCountPerFrustum > 0 ? cameraData.maxLightsCountPerFrustum : rendererData.maxLightsCountPerFrustum;
             }
             else
             {
-                _gridSize = rendererData.clusterBlockGridSize;
-                _maxLightsCount = rendererData.defaultMaxLightsCount;
-                _maxLightsCountPerFrustum = rendererData.defaultMaxLightsCountPerCluster;
+                _gridSize = rendererData.frustumGridSize;
+                _maxLightsCount = rendererData.maxLightsCount;
+                _maxLightsCountPerFrustum = rendererData.maxLightsCountPerFrustum;
             }
         }
         
@@ -354,12 +427,21 @@ namespace MyRenderPipeline
 
         public override void BeforeRender(Camera camera, ScriptableRenderContext context, CullingResults cullingResults)
         {
-            if (camera.scaledPixelWidth != _screenDimension.x || camera.scaledPixelHeight != _screenDimension.y)
+            _jobHandle.Complete();
+            RefreshConstantBuffer(context);
+            
+            context.ExecuteCommandBuffer(_cmdBuffer);
+            _cmdBuffer.Clear();
+
+            if (camera.scaledPixelWidth != _screenDimension.x || camera.scaledPixelHeight != _screenDimension.y ||
+                !MathUtils.FloatEquals(camera.nearClipPlane, _cameraZNear) || !MathUtils.FloatEquals(camera.farClipPlane, _cameraZFar))
             {
                 _screenDimension.x = camera.scaledPixelWidth;
                 _screenDimension.y = camera.scaledPixelHeight;
+                _cameraZNear = camera.nearClipPlane;
+                _cameraZFar = camera.farClipPlane;
 
-                inverseProjectionMat = GL.GetGPUProjectionMatrix(camera.projectionMatrix, false).inverse;
+                _inverseProjectionMat = GL.GetGPUProjectionMatrix(camera.projectionMatrix, false).inverse;
                 
                 ReloadRendererConfigure(camera);
                 BuildViewFrustums();
@@ -367,15 +449,9 @@ namespace MyRenderPipeline
                 ReleaseJobNativeContainers();
                 InitJobNativeContainers();
                 
-//                context.ExecuteCommandBuffer(_cmdBuffer);
-//                _cmdBuffer.Clear();
-                
                 Debug.Log($"Rebuild frustums. GirdSize is {_gridSize}, Frustums count is {_frustumsCount}, viewFrustums size is {_viewFrustums.Length}");
             }
 
-            _jobHandle.Complete();
-            RefreshConstantBuffer(context);
-            
             _lightsCount = cullingResults.visibleLights.Length;
             _frustumLightIndexes.Clear();
             
@@ -407,7 +483,14 @@ namespace MyRenderPipeline
             var generateCBJob = new GenerateLightsCBDatasJob
             {
                 lightBufferArray = _nativeLightBufferArray,
-                indexListBufferArray = _nativeIndexListBufferArray,
+                indexListBuffer1Array = _nativeIndexListBuffer1Array,
+                indexListBuffer2Array = _nativeIndexListBuffer2Array,
+                indexListBuffer3Array = _nativeIndexListBuffer3Array,
+                indexListBuffer4Array = _nativeIndexListBuffer4Array,
+                indexListBuffer5Array = _nativeIndexListBuffer5Array,
+                indexListBuffer6Array = _nativeIndexListBuffer6Array,
+                indexListBuffer7Array = _nativeIndexListBuffer7Array,
+                indexListBuffer8Array = _nativeIndexListBuffer8Array,
                 lights = _lights,
                 frustumLightIndexes = _frustumLightIndexes,
                 frustumLightsCount = _frustumLightsCount,
@@ -424,10 +507,24 @@ namespace MyRenderPipeline
         private unsafe void InitConstantBuffers(CommandBuffer cmdBuffer)
         {
             _cbLightBuffer = new ComputeBuffer(ShaderIdsAndConstants.ConstBuf_LightBuffer_EntriesCount, sizeof(float4), ComputeBufferType.Constant);
-            _cbLightIndexListBuffer = new ComputeBuffer(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, sizeof(int4), ComputeBufferType.Constant);
+            _cbLightIndexList1Buffer = new ComputeBuffer(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, sizeof(int4), ComputeBufferType.Constant);
+            _cbLightIndexList2Buffer = new ComputeBuffer(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, sizeof(int4), ComputeBufferType.Constant);
+            _cbLightIndexList3Buffer = new ComputeBuffer(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, sizeof(int4), ComputeBufferType.Constant);
+            _cbLightIndexList4Buffer = new ComputeBuffer(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, sizeof(int4), ComputeBufferType.Constant);
+            _cbLightIndexList5Buffer = new ComputeBuffer(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, sizeof(int4), ComputeBufferType.Constant);
+            _cbLightIndexList6Buffer = new ComputeBuffer(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, sizeof(int4), ComputeBufferType.Constant);
+            _cbLightIndexList7Buffer = new ComputeBuffer(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, sizeof(int4), ComputeBufferType.Constant);
+            _cbLightIndexList8Buffer = new ComputeBuffer(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, sizeof(int4), ComputeBufferType.Constant);
             
             _nativeLightBufferArray = new NativeArray<float4>(ShaderIdsAndConstants.ConstBuf_LightBuffer_EntriesCount, Allocator.Persistent);
-            _nativeIndexListBufferArray = new NativeArray<int4>(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, Allocator.Persistent);
+            _nativeIndexListBuffer1Array = new NativeArray<int4>(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, Allocator.Persistent);
+            _nativeIndexListBuffer2Array = new NativeArray<int4>(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, Allocator.Persistent);
+            _nativeIndexListBuffer3Array = new NativeArray<int4>(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, Allocator.Persistent);
+            _nativeIndexListBuffer4Array = new NativeArray<int4>(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, Allocator.Persistent);
+            _nativeIndexListBuffer5Array = new NativeArray<int4>(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, Allocator.Persistent);
+            _nativeIndexListBuffer6Array = new NativeArray<int4>(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, Allocator.Persistent);
+            _nativeIndexListBuffer7Array = new NativeArray<int4>(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, Allocator.Persistent);
+            _nativeIndexListBuffer8Array = new NativeArray<int4>(ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Entries_Count, Allocator.Persistent);
         }
 
         private void ReleaseConstantBuffers()
@@ -437,36 +534,110 @@ namespace MyRenderPipeline
                 _cbLightBuffer.Release();
                 _cbLightBuffer = null;
             }
-            if (_cbLightIndexListBuffer != null)
+            if (_cbLightIndexList1Buffer != null)
             {
-                _cbLightIndexListBuffer.Release();
-                _cbLightIndexListBuffer = null;
+                _cbLightIndexList1Buffer.Release();
+                _cbLightIndexList1Buffer = null;
+            }
+            if (_cbLightIndexList2Buffer != null)
+            {
+                _cbLightIndexList2Buffer.Release();
+                _cbLightIndexList2Buffer = null;
+            }
+            if (_cbLightIndexList3Buffer != null)
+            {
+                _cbLightIndexList3Buffer.Release();
+                _cbLightIndexList3Buffer = null;
+            }
+            if (_cbLightIndexList4Buffer != null)
+            {
+                _cbLightIndexList4Buffer.Release();
+                _cbLightIndexList4Buffer = null;
+            }
+            if (_cbLightIndexList5Buffer != null)
+            {
+                _cbLightIndexList5Buffer.Release();
+                _cbLightIndexList5Buffer = null;
+            }
+            if (_cbLightIndexList6Buffer != null)
+            {
+                _cbLightIndexList6Buffer.Release();
+                _cbLightIndexList6Buffer = null;
+            }
+            if (_cbLightIndexList7Buffer != null)
+            {
+                _cbLightIndexList7Buffer.Release();
+                _cbLightIndexList7Buffer = null;
+            }
+            if (_cbLightIndexList8Buffer != null)
+            {
+                _cbLightIndexList8Buffer.Release();
+                _cbLightIndexList8Buffer = null;
             }
             
             if (_nativeLightBufferArray.IsCreated)
             {
                 _nativeLightBufferArray.Dispose();
             }
-            if (_nativeIndexListBufferArray.IsCreated)
+            if (_nativeIndexListBuffer1Array.IsCreated)
             {
-                _nativeIndexListBufferArray.Dispose();
+                _nativeIndexListBuffer1Array.Dispose();
+            }
+            if (_nativeIndexListBuffer2Array.IsCreated)
+            {
+                _nativeIndexListBuffer2Array.Dispose();
+            }
+            if (_nativeIndexListBuffer3Array.IsCreated)
+            {
+                _nativeIndexListBuffer3Array.Dispose();
+            }
+            if (_nativeIndexListBuffer4Array.IsCreated)
+            {
+                _nativeIndexListBuffer4Array.Dispose();
+            }
+            if (_nativeIndexListBuffer5Array.IsCreated)
+            {
+                _nativeIndexListBuffer5Array.Dispose();
+            }
+            if (_nativeIndexListBuffer6Array.IsCreated)
+            {
+                _nativeIndexListBuffer6Array.Dispose();
+            }
+            if (_nativeIndexListBuffer7Array.IsCreated)
+            {
+                _nativeIndexListBuffer7Array.Dispose();
+            }
+            if (_nativeIndexListBuffer8Array.IsCreated)
+            {
+                _nativeIndexListBuffer8Array.Dispose();
             }
         }
 
         private void RefreshConstantBuffer(ScriptableRenderContext context)
         {
             _cbLightBuffer.SetData(_nativeLightBufferArray);
-            _cbLightIndexListBuffer.SetData(_nativeIndexListBufferArray);
+            _cbLightIndexList1Buffer.SetData(_nativeIndexListBuffer1Array);
+            _cbLightIndexList2Buffer.SetData(_nativeIndexListBuffer2Array);
+            _cbLightIndexList3Buffer.SetData(_nativeIndexListBuffer3Array);
+            _cbLightIndexList4Buffer.SetData(_nativeIndexListBuffer4Array);
+            _cbLightIndexList5Buffer.SetData(_nativeIndexListBuffer5Array);
+            _cbLightIndexList6Buffer.SetData(_nativeIndexListBuffer6Array);
+            _cbLightIndexList7Buffer.SetData(_nativeIndexListBuffer7Array);
+            _cbLightIndexList8Buffer.SetData(_nativeIndexListBuffer8Array);
 
             _cmdBuffer.SetGlobalConstantBuffer(_cbLightBuffer, ShaderIdsAndConstants.ConstBufId_LightBufferId, 0, ShaderIdsAndConstants.ConstBuf_LightBuffer_Size);
-            _cmdBuffer.SetGlobalConstantBuffer(_cbLightIndexListBuffer, ShaderIdsAndConstants.ConstBufId_LightIndexListBufferId, 0, ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Size);
+            _cmdBuffer.SetGlobalConstantBuffer(_cbLightIndexList1Buffer, ShaderIdsAndConstants.ConstBufId_LightIndexListBuffer1Id, 0, ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Size);
+            _cmdBuffer.SetGlobalConstantBuffer(_cbLightIndexList2Buffer, ShaderIdsAndConstants.ConstBufId_LightIndexListBuffer2Id, 0, ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Size);
+            _cmdBuffer.SetGlobalConstantBuffer(_cbLightIndexList3Buffer, ShaderIdsAndConstants.ConstBufId_LightIndexListBuffer3Id, 0, ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Size);
+            _cmdBuffer.SetGlobalConstantBuffer(_cbLightIndexList4Buffer, ShaderIdsAndConstants.ConstBufId_LightIndexListBuffer4Id, 0, ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Size);
+            _cmdBuffer.SetGlobalConstantBuffer(_cbLightIndexList5Buffer, ShaderIdsAndConstants.ConstBufId_LightIndexListBuffer5Id, 0, ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Size);
+            _cmdBuffer.SetGlobalConstantBuffer(_cbLightIndexList6Buffer, ShaderIdsAndConstants.ConstBufId_LightIndexListBuffer6Id, 0, ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Size);
+            _cmdBuffer.SetGlobalConstantBuffer(_cbLightIndexList7Buffer, ShaderIdsAndConstants.ConstBufId_LightIndexListBuffer7Id, 0, ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Size);
+            _cmdBuffer.SetGlobalConstantBuffer(_cbLightIndexList8Buffer, ShaderIdsAndConstants.ConstBufId_LightIndexListBuffer8Id, 0, ShaderIdsAndConstants.ConstBuf_LightIndexListBuffer_Size);
             
+            _cmdBuffer.SetGlobalInt(ShaderIdsAndConstants.PropId_UseClusterCulling, 0);
             _cmdBuffer.SetGlobalInt(ShaderIdsAndConstants.PropId_LightsCountId, _lightsCount);
-            
             _cmdBuffer.SetGlobalVector(ShaderIdsAndConstants.PropId_FrustumParamsId, new Vector4(_frustumsCountHorizontal, _frustumsCountVertical, _gridSize, _frustumsCount));
-                
-            context.ExecuteCommandBuffer(_cmdBuffer);
-            _cmdBuffer.Clear();
         }
         
         private void InitJobNativeContainers()

@@ -107,6 +107,7 @@
      <Compile Include="Assets\Scripts\LightsManager.cs" />
      <Compile Include="Assets\Scripts\MyRenderPipeline\BaseRendererJob.cs" />
      <Compile Include="Assets\Scripts\MyRenderPipeline\ClusterLightsCullingJob.cs" />
+     <Compile Include="Assets\Scripts\MyRenderPipeline\ClusterLightsCullingJob_ComputeShader.cs" />
      <Compile Include="Assets\Scripts\MyRenderPipeline\DataTypes.cs" />
      <Compile Include="Assets\Scripts\MyRenderPipeline\EnumDef.cs" />
      <Compile Include="Assets\Scripts\MyRenderPipeline\ForwardPlusCameraData.cs" />
@@ -115,6 +116,7 @@
      <Compile Include="Assets\Scripts\MyRenderPipeline\ForwardPlusRendererData.cs" />
      <Compile Include="Assets\Scripts\MyRenderPipeline\FrustumLightsCullingJob.cs" />
      <Compile Include="Assets\Scripts\MyRenderPipeline\IPipelineRenderer.cs" />
+     <Compile Include="Assets\Scripts\MyRenderPipeline\LightIndexBuffers.cs" />
      <Compile Include="Assets\Scripts\MyRenderPipeline\MathUtils.cs" />
      <Compile Include="Assets\Scripts\MyRenderPipeline\MyRenderPipeline.cs" />
      <Compile Include="Assets\Scripts\MyRenderPipeline\MyRenderPipelineAsset.cs" />

@@ -31,10 +31,10 @@ namespace MyRenderPipeline
         {
             foreach(var cam in cameras)
             {
-                if (cam.cameraType == CameraType.Preview || cam.cameraType == CameraType.Reflection || cam.cameraType == CameraType.VR)// == LayerMask.NameToLayer("UI"))
-                {
-                    continue;
-                }
+//                if (cam.cameraType == CameraType.Preview || cam.cameraType == CameraType.Reflection || cam.cameraType == CameraType.VR)// == LayerMask.NameToLayer("UI"))
+//                {
+//                    continue;
+//                }
                 IPipelineRenderer renderer;
                 if(!cameraRendererDic.TryGetValue(cam, out renderer))
                 {

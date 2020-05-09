@@ -47,8 +47,10 @@ namespace MyRenderPipeline
         public void Setup(ScriptableRenderContext context, Camera camera)
         {
             this.camera = camera;
+            this.camera.allowMSAA = false;
 
-            lightsCullingJob = new FrustumLightsCullingJob();
+            lightsCullingJob = new ClusterLightsCullingJob();
+//            lightsCullingJob = new FrustumLightsCullingJob();
             lightsCullingJob.Init(camera, context);
         }
 

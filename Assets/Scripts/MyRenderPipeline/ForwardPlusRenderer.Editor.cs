@@ -31,6 +31,9 @@ namespace MyRenderPipeline
         
         partial void DrawGizmos()
         {
+            if (camera.cameraType != CameraType.SceneView)
+                return;
+            
             if(Handles.ShouldRenderGizmos())
             {
                 context.DrawGizmos(camera, GizmoSubset.PreImageEffects);

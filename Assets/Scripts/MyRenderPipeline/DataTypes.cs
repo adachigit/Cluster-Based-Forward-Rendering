@@ -32,6 +32,8 @@ namespace MyRenderPipeline
         [StructLayout(LayoutKind.Sequential)]
         public struct Frustum
         {
+            public Plane planeNear;
+            public Plane planeFar;
             public Plane planeLeft;
             public Plane planeRight;
             public Plane planeTop;
@@ -41,8 +43,8 @@ namespace MyRenderPipeline
         [StructLayout(LayoutKind.Sequential)]
         public struct AABB
         {
-            public Vector4 Min;
-            public Vector4 Max;
+            public float4 Min;
+            public float4 Max;
         }
         
         [StructLayout(LayoutKind.Sequential)]
