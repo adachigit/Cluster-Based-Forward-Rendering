@@ -69,6 +69,7 @@ float4 LitPassFragment(Varyings input) : SV_TARGET
     float3 lighting = GetLightingByScreenCoord(surface, input.positionCS.xy);
     
     return float4(lighting * surface.color, surface.alpha);
+//    return float4(lighting, surface.alpha);
 }
 
 #endif

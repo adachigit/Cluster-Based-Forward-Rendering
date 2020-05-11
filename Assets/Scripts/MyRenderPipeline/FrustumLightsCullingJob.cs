@@ -433,8 +433,7 @@ namespace MyRenderPipeline
             context.ExecuteCommandBuffer(_cmdBuffer);
             _cmdBuffer.Clear();
 
-            if (camera.scaledPixelWidth != _screenDimension.x || camera.scaledPixelHeight != _screenDimension.y ||
-                !MathUtils.FloatEquals(camera.nearClipPlane, _cameraZNear) || !MathUtils.FloatEquals(camera.farClipPlane, _cameraZFar))
+            if (camera.scaledPixelWidth != _screenDimension.x || camera.scaledPixelHeight != _screenDimension.y)
             {
                 _screenDimension.x = camera.scaledPixelWidth;
                 _screenDimension.y = camera.scaledPixelHeight;

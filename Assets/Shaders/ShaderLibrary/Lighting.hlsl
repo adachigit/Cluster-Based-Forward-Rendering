@@ -25,63 +25,75 @@ float3 GetLighting(Surface surface, int index)
 
 int GetLightIndex(int indexArrayIndex, int indexInArray)
 {
+    float lightIndex = 0;
+    
     switch(indexArrayIndex)
     {
     case 0:
-        return _LightIndexList1[indexInArray / 4][indexInArray % 4];
+        lightIndex = _LightIndexList1[indexInArray / 4][indexInArray % 4];
+        break;
     case 1:
-        return _LightIndexList2[indexInArray / 4][indexInArray % 4];
+        lightIndex = _LightIndexList2[indexInArray / 4][indexInArray % 4];
+        break;
     case 2:
-        return _LightIndexList3[indexInArray / 4][indexInArray % 4];
+        lightIndex = _LightIndexList3[indexInArray / 4][indexInArray % 4];
+        break;
     case 3:
-        return _LightIndexList4[indexInArray / 4][indexInArray % 4];
+        lightIndex = _LightIndexList4[indexInArray / 4][indexInArray % 4];
+        break;
     case 4:
-        return _LightIndexList5[indexInArray / 4][indexInArray % 4];
+        lightIndex = _LightIndexList5[indexInArray / 4][indexInArray % 4];
+        break;
     case 5:
-        return _LightIndexList6[indexInArray / 4][indexInArray % 4];
+        lightIndex = _LightIndexList6[indexInArray / 4][indexInArray % 4];
+        break;
     case 6:
-        return _LightIndexList7[indexInArray / 4][indexInArray % 4];
+        lightIndex = _LightIndexList7[indexInArray / 4][indexInArray % 4];
+        break;
     case 7:
-        return _LightIndexList8[indexInArray / 4][indexInArray % 4];
+        lightIndex = _LightIndexList8[indexInArray / 4][indexInArray % 4];
+        break;
     }
     
-    return 0;
+    return floor(lightIndex + 0.5);
 }
 
-float GetClusterZIndex(Surface surface, float2 screenCoord)
+int2 GetFrustumIndex2D(float2 screenCoord)
 {
-    int xClusterIndex = floor(screenCoord.x / _ClusterParams.z);
-    int yClusterIndex = floor(screenCoord.y / _ClusterParams.z);
+    int xFrustumIndex = floor(screenCoord.x / _FrustumParams.z);
+    int yFrustumIndex = floor(screenCoord.y / _FrustumParams.z);
+    
+    return int2(xFrustumIndex, yFrustumIndex);
+}
+
+int3 GetClusterIndex3D(Surface surface, float2 screenCoord)
+{
+    int xClusterIndex = floor(screenCoord.x / _ClusterParams.w);
+    int yClusterIndex = floor(screenCoord.y / _ClusterParams.w);
 
     float4 posVS = mul(unity_MatrixV, float4(surface.position, 1.0));
-    float z = (posVS.z + _ProjectionParams.y) / _ClusterZStartStep;// + _ClusterZStartStep;
-    int zClusterIndex = floor((float)log(-z) / log(_ClusterZStepRatio));
+    float tmp = 1.0 - (-posVS.z - _ProjectionParams.y) * (1.0 - _ClusterZStepRatio) / _ClusterZStartStep;
+    int zClusterIndex = floor(log(tmp) / log(_ClusterZStepRatio));
     
-    return zClusterIndex;
+    return int3(xClusterIndex, yClusterIndex, zClusterIndex);
 }
 
 float4 GetLightGridInfo(Surface surface, float2 screenCoord)
 {
+    [branch]
     if(_UseClusterCulling > 0)
     {
-        int xClusterIndex = floor(screenCoord.x / _ClusterParams.z);
-        int yClusterIndex = floor(screenCoord.y / _ClusterParams.z);
-
-        float4 posVS = mul(unity_MatrixV, float4(surface.position, 1.0));
-        float z = (posVS.z + _ProjectionParams.y) / _ClusterZStartStep;// + _ClusterZStartStep;
-        int zClusterIndex = floor((float)log(-z) / log(_ClusterZStepRatio));
-
-        int clusterIndex = yClusterIndex * _ClusterParams.x + xClusterIndex + (zClusterIndex * _ClusterParams.x * _ClusterParams.y);
+        int3 clusterIndex3D = GetClusterIndex3D(surface, screenCoord);
+        int clusterIndex1D = clusterIndex3D.y * _ClusterParams.x + clusterIndex3D.x + (clusterIndex3D.z * _ClusterParams.x * _ClusterParams.y);
         
-        return _ClusterLightGrids[clusterIndex];
+        return _ClusterLightGrids[clusterIndex1D];
     }
     else
     {
-        int xFrustumIndex = floor(screenCoord.x / _FrustumParams.z);
-        int yFrustumIndex = floor(screenCoord.y / _FrustumParams.z);
-        int frustumIndex = yFrustumIndex * _FrustumParams.x + xFrustumIndex;
+        int2 frustumIndex2D = GetFrustumIndex2D(screenCoord);
+        int frustumIndex1D = frustumIndex2D.y * _FrustumParams.x + frustumIndex2D.x;
         
-        return _FrustumLightGrids[frustumIndex];
+        return _FrustumLightGrids[frustumIndex1D];
     }
 }
 
@@ -98,18 +110,12 @@ float3 GetLightingByScreenCoord(Surface surface, float2 screenCoord)
 #else
     screenY = _ScreenParams.y - screenY;
 #endif
-/*
-    int xFrustumIndex = floor(screenX / _FrustumParams.z);
-    int yFrustumIndex = floor(screenY / _FrustumParams.z);
-    int frustumIndex = yFrustumIndex * _FrustumParams.x + xFrustumIndex;
-    
-    float4 lightGrid = _FrustumLightGrids[frustumIndex];
-*/
+
     float4 lightGrid = GetLightGridInfo(surface, float2(screenX, screenY));
     
-    int indexListStartIndex = (int)lightGrid.x;
-    int lightCount = (int)lightGrid.y;
-    int indexListArrayIndex = (int)lightGrid.z;
+    int indexListStartIndex = floor(lightGrid.x + 0.5);
+    int lightCount = floor(lightGrid.y + 0.5);
+    int indexListArrayIndex = floor(lightGrid.z + 0.5);
 
     float3 lighting = 0;
     
@@ -118,7 +124,11 @@ float3 GetLightingByScreenCoord(Surface surface, float2 screenCoord)
         uint listIndex = indexListStartIndex + i;
         lighting += GetLighting(surface, GetLightIndex(indexListArrayIndex, listIndex));
     }
-    
+  
+//    int3 clusterIndex = GetClusterIndex3D(surface, screenCoord);
+//    return float3(((float)clusterIndex.z / _ClusterParams.z), 0, 0);
+//    float4 posVS = mul(unity_MatrixV, float4(surface.position, 1.0));
+//    return float3((-posVS.z - _ProjectionParams.y) / _ProjectionParams.z, 0, 0);
     return lighting;
 }
 

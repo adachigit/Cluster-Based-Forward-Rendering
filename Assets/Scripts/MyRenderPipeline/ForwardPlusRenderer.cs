@@ -65,7 +65,7 @@ namespace MyRenderPipeline
             
             JobsBeforeRender(camera, context, cullingResults);
 
-            Setup();
+            Prepare();
             DrawVisibleGeometry();
             DrawGizmos();
 
@@ -75,7 +75,7 @@ namespace MyRenderPipeline
         }
 
         // 设置
-        void Setup()
+        private void Prepare()
         {
             context.SetupCameraProperties(camera);        // 先设置摄像机属性等Shader变量
             var clearFlags = camera.clearFlags;

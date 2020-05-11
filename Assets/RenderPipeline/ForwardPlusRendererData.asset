@@ -20,7 +20,7 @@ MonoBehaviour:
   clusterZStartStep: 2
   clusterZStepRatio: 1.5
   clusterZFarMax: 30
-  maxLightsCountPerCluster: 8
+  maxLightsCountPerCluster: 16
   defaultFov: 0
   clusterAABBComputerShader: {fileID: 7200000, guid: b108a207de6bada4dae6d131d039ef49,
     type: 3}
