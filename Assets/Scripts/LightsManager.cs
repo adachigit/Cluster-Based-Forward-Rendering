@@ -11,6 +11,16 @@ public class LightsManager : MonoBehaviour
     public InputField m_LightsCountInput;
     public Camera m_Camera;
 
+    [Range(0.0f, 2.0f)]
+    public float m_MinRange;
+    [Range(1.0f, 6.0f)]
+    public float m_MaxRange;
+    [Range(0.0f, 3.0f)]
+    public float m_MinIntensity;
+    [Range(2.0f, 6.0f)]
+    public float m_MaxIntensity;
+    public float m_MaxZFar;
+
     private float MinZ;
     private float MaxZ;
     private float MinY;
@@ -29,8 +39,10 @@ public class LightsManager : MonoBehaviour
     /// </summary>
     void Start()
     {
+        Application.targetFrameRate = -1;
+        
         MinZ = m_Camera.nearClipPlane;// + (m_Camera.farClipPlane - m_Camera.nearClipPlane) / 5.0f;
-        MaxZ = m_Camera.farClipPlane;
+        MaxZ = m_MaxZFar > 0 ? m_MaxZFar : m_Camera.farClipPlane;
 
         MinY = 0.0f;//m_Camera.nearClipPlane * Mathf.Tan(m_Camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
         MinX = m_Camera.aspect * MinY;
@@ -68,9 +80,9 @@ public class LightsManager : MonoBehaviour
             go.transform.position = m_Camera.transform.localToWorldMatrix * new Vector4(x * signX, y * signY, z, 1.0f);
             Light l = go.AddComponent<Light>();
             l.type = LightType.Point;
-            l.range = Random.Range(1.0f, 2.0f);
+            l.range = Random.Range(m_MinRange, m_MaxRange);
             l.color = new Color(Random.Range(0.0f, 1.0f), Random.Range(0.0f, 1.0f), Random.Range(0.0f, 1.0f));
-            l.intensity = Random.Range(2.0f, 5.0f);
+            l.intensity = Random.Range(m_MinIntensity, m_MaxIntensity);
 
             go.transform.parent = m_LightsGroupObject.transform;
         }

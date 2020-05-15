@@ -47,10 +47,27 @@ namespace MyRenderPipeline
         public void Setup(ScriptableRenderContext context, Camera camera)
         {
             this.camera = camera;
-            this.camera.allowMSAA = false;
+            this.camera.allowMSAA = true;
 
-            lightsCullingJob = new ClusterLightsCullingJob();
-//            lightsCullingJob = new FrustumLightsCullingJob();
+            MyRenderPipelineAsset pipelineAsset = GraphicsSettings.renderPipelineAsset as MyRenderPipelineAsset;
+            rendererData = pipelineAsset.GetRendererData<ForwardPlusRendererData>(MyRenderPipeline.RendererType.ForwardPlus);
+
+            if (null == rendererData)
+            {
+                lightsCullingJob = new FrustumLightsCullingJob();
+            }
+            else
+            {
+                if (rendererData.lightsCullingType == ForwardPlusRendererData.LightsCullingType.Cluster)
+                {
+                    lightsCullingJob = new ClusterLightsCullingJob();
+                }
+                else
+                {
+                    lightsCullingJob = new FrustumLightsCullingJob();
+                }
+            }
+            
             lightsCullingJob.Init(camera, context);
         }
 
@@ -92,6 +109,7 @@ namespace MyRenderPipeline
             if(camera.TryGetCullingParameters(out ScriptableCullingParameters p))
             {
                 lightsCullingJob.BeforeCulling(ref p);
+//                p.cullingOptions &= CullingOptions.DisablePerObjectCulling | CullingOptions.NeedsLighting;
                 cullingResults = context.Cull(ref p);
 
                 return true;

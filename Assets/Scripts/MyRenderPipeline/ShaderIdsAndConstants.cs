@@ -18,18 +18,16 @@ namespace MyRenderPipeline
         public static readonly int ConstBufId_LightIndexListBuffer2Id = Shader.PropertyToID("_LightIndexListBuffer2");
         public static readonly int ConstBufId_LightIndexListBuffer3Id = Shader.PropertyToID("_LightIndexListBuffer3");
         public static readonly int ConstBufId_LightIndexListBuffer4Id = Shader.PropertyToID("_LightIndexListBuffer4");
-        public static readonly int ConstBufId_LightIndexListBuffer5Id = Shader.PropertyToID("_LightIndexListBuffer5");
-        public static readonly int ConstBufId_LightIndexListBuffer6Id = Shader.PropertyToID("_LightIndexListBuffer6");
-        public static readonly int ConstBufId_LightIndexListBuffer7Id = Shader.PropertyToID("_LightIndexListBuffer7");
-        public static readonly int ConstBufId_LightIndexListBuffer8Id = Shader.PropertyToID("_LightIndexListBuffer8");
 
         public static readonly int MaxConstantBufferEntriesCount = 4096;
         
         public static readonly int MaxLightsCount = 512;
-        public static readonly int MaxLightsCountPerFrustum = 32;
         public static readonly int MaxFrustumsCount = 2048;
-
         public static readonly int MaxClustersCount = 4096;
+
+        public static readonly int LightIndexList_Capacity = MaxConstantBufferEntriesCount * 4;
+
+        public const int MaxLightIndexListCount = 4;
         
         // constant buffer _LightBuffer size
         public static readonly unsafe int PropSize_LightDirectionsOrPositions = sizeof(float4) * MaxLightsCount;

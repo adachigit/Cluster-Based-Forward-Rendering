@@ -16,7 +16,7 @@ UNITY_INSTANCING_BUFFER_END(UnityPerMaterial)
 
 struct Attributes
 {
-    float3 positionOS : POSITION;
+    float4 positionOS : POSITION;
     float3 normalOS : NORMAL;
     float2 baseUV : TEXCOORD0;
     UNITY_VERTEX_INPUT_INSTANCE_ID
@@ -61,6 +61,7 @@ float4 LitPassFragment(Varyings input) : SV_TARGET
     #endif
     
     Surface surface;
+    surface.positionCS = input.positionCS;
     surface.position = input.positionWS;
     surface.normal = normalize(input.normalWS);
     surface.color = base.rgb;
@@ -68,7 +69,7 @@ float4 LitPassFragment(Varyings input) : SV_TARGET
 
     float3 lighting = GetLightingByScreenCoord(surface, input.positionCS.xy);
     
-    return float4(lighting * surface.color, surface.alpha);
+    return float4(surface.color * lighting, surface.alpha);
 //    return float4(lighting, surface.alpha);
 }
 

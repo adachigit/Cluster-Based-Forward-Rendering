@@ -17,7 +17,7 @@ CBUFFER_START(_LightBuffer)
 CBUFFER_END
 
 CBUFFER_START(_ClusterLightBuffer)
-    float4 _ClusterLightGrids[MAX_CLUSTERS_COUNT];
+    int4 _ClusterLightGrids[MAX_CLUSTERS_COUNT];
 CBUFFER_END
 
 CBUFFER_START(_LightIndexListBuffer1)
@@ -31,18 +31,6 @@ CBUFFER_START(_LightIndexListBuffer3)
 CBUFFER_END
 CBUFFER_START(_LightIndexListBuffer4)
     float4 _LightIndexList4[LIGHTINDEXLIST_ENTRIES_COUNT];
-CBUFFER_END
-CBUFFER_START(_LightIndexListBuffer5)
-    float4 _LightIndexList5[LIGHTINDEXLIST_ENTRIES_COUNT];
-CBUFFER_END
-CBUFFER_START(_LightIndexListBuffer6)
-    float4 _LightIndexList6[LIGHTINDEXLIST_ENTRIES_COUNT];
-CBUFFER_END
-CBUFFER_START(_LightIndexListBuffer7)
-    float4 _LightIndexList7[LIGHTINDEXLIST_ENTRIES_COUNT];
-CBUFFER_END
-CBUFFER_START(_LightIndexListBuffer8)
-    float4 _LightIndexList8[LIGHTINDEXLIST_ENTRIES_COUNT];
 CBUFFER_END
 
 float4 _FrustumParams;     //x is frustums count in horizontal, y is frustums count in vertical, z is frustum's block size, w is total frustum count.

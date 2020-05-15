@@ -11,6 +11,21 @@ namespace MyRenderPipeline
         {
             return Mathf.Abs(a - b) <= float.Epsilon;
         }
+
+        public static float IntToFixFloat(int value, int scale)
+        {
+            return (float)value / scale;
+        }
+
+        public static float ConvertLightIndex(int index)
+        {
+            return IntToFixFloat(index, ShaderIdsAndConstants.MaxLightsCount);
+        }
+
+        public static float ConvertGridLightIndex(int index)
+        {
+            return IntToFixFloat(index, ShaderIdsAndConstants.LightIndexList_Capacity);
+        }
         
         /**
          * 通过屏幕空间坐标返回剪裁空间坐标，即将当前屏幕坐标转化到[-1.0, 1.0]范围内
@@ -122,7 +137,7 @@ namespace MyRenderPipeline
             return true;
         }
 
-        //线段与平面是否相交，并求交点
+        //求直线与平面交点
         public static void LineIntersectPlane(float3 startPoint, float3 endPoint, ref DataTypes.Plane plane, out float3 intersectPoint)
         {
             float3 v = endPoint - startPoint;

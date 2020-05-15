@@ -5,19 +5,20 @@
 
 float3 GetLighting(Surface surface, int index)
 {
-    float4 lightDirectionOrPosition = _LightDirectionsOrPositions[index];
-    float4 lightAtten = _LightAttenuations[index];
+    half4 lightDirectionOrPosition = _LightDirectionsOrPositions[index];
+    half4 lightAtten = _LightAttenuations[index];
     float3 lightColor = _LightColors[index].rgb;
     
     float3 lightVector = lightDirectionOrPosition.xyz - surface.position * lightDirectionOrPosition.w;
     float3 lightDirection = normalize(lightVector);
-    float diffuse = saturate(dot(surface.normal, lightDirection));
+    half diffuse = saturate(dot(surface.normal, lightDirection));
     
-    float rangeFade = dot(lightVector, lightVector) * lightAtten.x;
-    rangeFade = saturate(1.0 - rangeFade * rangeFade);
-    rangeFade *= rangeFade;
+    half rangeFade = dot(lightVector, lightVector) * lightAtten.x;
+    rangeFade = saturate(1.0 - rangeFade);
+//    rangeFade = saturate(1.0 - rangeFade * rangeFade);
+//    rangeFade *= rangeFade;
     
-    float distanceSqr = max(dot(lightVector, lightVector), 0.00001);
+   half distanceSqr = max(dot(lightVector, lightVector), 0.00001);
     diffuse *= rangeFade / distanceSqr;
     
     return diffuse * lightColor;
@@ -25,8 +26,11 @@ float3 GetLighting(Surface surface, int index)
 
 int GetLightIndex(int indexArrayIndex, int indexInArray)
 {
-    float lightIndex = 0;
+    int lightIndex = 0;
     
+    if(indexArrayIndex < 0)
+        return 0;
+        
     switch(indexArrayIndex)
     {
     case 0:
@@ -41,21 +45,9 @@ int GetLightIndex(int indexArrayIndex, int indexInArray)
     case 3:
         lightIndex = _LightIndexList4[indexInArray / 4][indexInArray % 4];
         break;
-    case 4:
-        lightIndex = _LightIndexList5[indexInArray / 4][indexInArray % 4];
-        break;
-    case 5:
-        lightIndex = _LightIndexList6[indexInArray / 4][indexInArray % 4];
-        break;
-    case 6:
-        lightIndex = _LightIndexList7[indexInArray / 4][indexInArray % 4];
-        break;
-    case 7:
-        lightIndex = _LightIndexList8[indexInArray / 4][indexInArray % 4];
-        break;
     }
     
-    return floor(lightIndex + 0.5);
+    return lightIndex;
 }
 
 int2 GetFrustumIndex2D(float2 screenCoord)
@@ -72,26 +64,27 @@ int3 GetClusterIndex3D(Surface surface, float2 screenCoord)
     int yClusterIndex = floor(screenCoord.y / _ClusterParams.w);
 
     float4 posVS = mul(unity_MatrixV, float4(surface.position, 1.0));
-    float tmp = 1.0 - (-posVS.z - _ProjectionParams.y) * (1.0 - _ClusterZStepRatio) / _ClusterZStartStep;
-    int zClusterIndex = floor(log(tmp) / log(_ClusterZStepRatio));
+//    float tmp = 1.0 - (surface.positionCS.w - _ProjectionParams.y) * (1.0 - _ClusterZStepRatio) / _ClusterZStartStep;
+//    uint zClusterIndex = float(log2(tmp)) / log2(_ClusterZStepRatio);
+    int zClusterIndex = log2(-posVS.z - _ProjectionParams.y);
     
     return int3(xClusterIndex, yClusterIndex, zClusterIndex);
 }
 
-float4 GetLightGridInfo(Surface surface, float2 screenCoord)
+int4 GetLightGridInfo(Surface surface, float2 screenCoord)
 {
     [branch]
     if(_UseClusterCulling > 0)
     {
-        int3 clusterIndex3D = GetClusterIndex3D(surface, screenCoord);
-        int clusterIndex1D = clusterIndex3D.y * _ClusterParams.x + clusterIndex3D.x + (clusterIndex3D.z * _ClusterParams.x * _ClusterParams.y);
+        float3 clusterIndex3D = GetClusterIndex3D(surface, screenCoord);
+        float clusterIndex1D = clusterIndex3D.y * _ClusterParams.x + clusterIndex3D.x + (clusterIndex3D.z * _ClusterParams.x * _ClusterParams.y);
         
         return _ClusterLightGrids[clusterIndex1D];
     }
     else
     {
-        int2 frustumIndex2D = GetFrustumIndex2D(screenCoord);
-        int frustumIndex1D = frustumIndex2D.y * _FrustumParams.x + frustumIndex2D.x;
+        float2 frustumIndex2D = GetFrustumIndex2D(screenCoord);
+        float frustumIndex1D = frustumIndex2D.y * _FrustumParams.x + frustumIndex2D.x;
         
         return _FrustumLightGrids[frustumIndex1D];
     }
@@ -111,24 +104,19 @@ float3 GetLightingByScreenCoord(Surface surface, float2 screenCoord)
     screenY = _ScreenParams.y - screenY;
 #endif
 
-    float4 lightGrid = GetLightGridInfo(surface, float2(screenX, screenY));
-    
-    int indexListStartIndex = floor(lightGrid.x + 0.5);
-    int lightCount = floor(lightGrid.y + 0.5);
-    int indexListArrayIndex = floor(lightGrid.z + 0.5);
+    int4 lightGrid = GetLightGridInfo(surface, float2(screenX, screenY));
+ 
+    float indexListStartIndex = lightGrid.x;
+    float lightCount = lightGrid.y;
+    float indexListArrayIndex = lightGrid.z;
 
     float3 lighting = 0;
     
-    for(int i = 0; i < lightCount; ++i)
+    for(float i = 0; i < lightCount; ++i)
     {
-        uint listIndex = indexListStartIndex + i;
-        lighting += GetLighting(surface, GetLightIndex(indexListArrayIndex, listIndex));
+        lighting += GetLighting(surface, GetLightIndex(indexListArrayIndex, indexListStartIndex + i));
     }
   
-//    int3 clusterIndex = GetClusterIndex3D(surface, screenCoord);
-//    return float3(((float)clusterIndex.z / _ClusterParams.z), 0, 0);
-//    float4 posVS = mul(unity_MatrixV, float4(surface.position, 1.0));
-//    return float3((-posVS.z - _ProjectionParams.y) / _ProjectionParams.z, 0, 0);
     return lighting;
 }
 
