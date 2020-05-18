@@ -39,6 +39,13 @@ namespace MyRenderPipeline
             return float4(float2(texCoord.x, 1.0f - texCoord.y) * 2.0f - 1.0f, screen.z, screen.w);
         }
 
+        public static float2 ClipToScreen(float4 clip, int2 screenDimension)
+        {
+            float2 scaledClip = float2(clip.xy * 0.5f + 0.5f);
+
+            return float2(float2(scaledClip.x, 1.0f - scaledClip.y) * screenDimension);
+        }
+        
         /**
          * 剪裁空间坐标到视空间坐标的转换
          * clip.z需要存放[0-1]范围内的线性深度值
@@ -62,6 +69,14 @@ namespace MyRenderPipeline
             return ClipToView(clip, inverseProjection);
         }
 
+        public static float2 ViewToScreen(float4 viewPos, float4x4 projMat, int2 screenDimension)
+        {
+            var clip = mul(projMat, viewPos);
+            clip.xyz /= clip.w;
+
+            return ClipToScreen(clip, screenDimension);
+        }
+        
         /**
          * 点是否在平面的背面（平面法线指向为平面正面）
          */
@@ -153,6 +168,33 @@ namespace MyRenderPipeline
             int k = clusterIndex1D / (clusterGridDim.x * clusterGridDim.y);
 
             return int3(i, j, k);
+        }
+
+        public static int ComputeClusterIndex1D(int3 index3D, int3 clustersCount)
+        {
+            return index3D.z * clustersCount.x * clustersCount.y + index3D.y * clustersCount.x + index3D.x;
+        }
+
+        public static bool IsValidClusterIndex3D(int3 index3D, int3 clustersCount)
+        {
+            return (index3D.x >= 0 && index3D.x < clustersCount.x &&
+                    index3D.y >= 0 && index3D.y < clustersCount.y &&
+                    index3D.z >= 0 && index3D.z < clustersCount.z);
+        }
+        
+        public static float GetClusterZNear(int clusterZIndex, float cameraZNear, float startStep, float stepRatio)
+        {
+            return cameraZNear + pow(2, clusterZIndex);
+        }
+
+        public static int GetClusterZIndex(float viewZ, float cameraZNear, float startStep, float stepRatio)
+        {
+            return (int)log2(viewZ - cameraZNear);
+        }
+
+        public static int2 GetClusterXYIndex(float2 screenCoord, int2 gridSize)
+        {
+            return int2((int)screenCoord.x / gridSize.x, (int)screenCoord.y / gridSize.y);
         }
     }
 }

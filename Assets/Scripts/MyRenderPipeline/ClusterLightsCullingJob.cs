@@ -18,7 +18,7 @@ namespace MyRenderPipeline
         //temp job data
         private NativeArray<DataTypes.Light> _lights;
         private NativeArray<int> _clusterLightsCount;
-        private NativeMultiHashMap<int, short> _clusterLightIndexes;
+        private NativeMultiHashMap<int, int> _clusterLightIndexes;
         
         private readonly CommandBuffer _cmdBuffer = new CommandBuffer
         {
@@ -219,11 +219,11 @@ namespace MyRenderPipeline
         }
         
         [BurstCompile(CompileSynchronously = true)]
-        struct LightsCullingParallelFor : IJobParallelFor
+        struct LightsCullingParallelForOld : IJobParallelFor
         {
             [ReadOnly] public NativeArray<DataTypes.Light> lights;
             [ReadOnly] public NativeArray<DataTypes.Frustum> frustums;
-            public NativeMultiHashMap<int, short>.ParallelWriter lightIndexes;
+            public NativeMultiHashMap<int, int>.ParallelWriter lightIndexes;
             public NativeArray<int> frustumLightCount;
 
             public int lightsCount;
@@ -292,6 +292,151 @@ namespace MyRenderPipeline
         }
 
         [BurstCompile(CompileSynchronously = true)]
+        struct LightsCullingJob : IJob
+        {
+            [ReadOnly] public NativeArray<DataTypes.Light> lights;
+            [ReadOnly] public NativeArray<DataTypes.Frustum> frustums;
+            public NativeMultiHashMap<int, int> lightIndexes;
+            public NativeArray<int> frustumLightCount;
+
+            public int gridSize;
+            public int lightsCount;
+            public int4 clustersCount;
+            public float4x4 projMat;
+            public int2 screenDimension;
+            public float cameraZNear;
+            public float startStep;
+            public float stepRatio;
+            
+            public void Execute()
+            {
+                //Clear the old buffers
+                lightIndexes.Clear();
+                for (int i = 0; i < clustersCount.w; ++i)
+                {
+                    frustumLightCount[i] = 0;
+                }
+                
+                for (int i = 0; i < lightsCount; ++i)
+                {
+                    var light = lights[i];
+                    switch (light.type)
+                    {
+                    case EnumDef.LightType.Directional:
+                        AssignDirectionalLight(i);
+                        break;
+                    case EnumDef.LightType.Point:
+                        AssignPointLight(i, light);
+                        break;
+                    }
+                }
+            }
+
+            private void AssignDirectionalLight(int index)
+            {
+                for (int i = 0; i < clustersCount.w; ++i)
+                {
+                    lightIndexes.Add(i, index);
+                    frustumLightCount[i] = frustumLightCount[i] + 1;
+                }
+            }
+
+            private void AssignPointLight(int lightIndex, DataTypes.Light light)
+            {
+                float2 screenCoord = MathUtils.ViewToScreen(light.viewPos, projMat, screenDimension);
+                int3 clusterIndex3D = int3(MathUtils.GetClusterXYIndex(screenCoord, int2(gridSize, gridSize)), MathUtils.GetClusterZIndex(-light.viewPos.z, cameraZNear, startStep, stepRatio));
+                int3 clustersCount3D = int3(clustersCount.xyz);
+                
+                int xMaxOffset = GetMaxOffsetOfClusterByLight(light, clusterIndex3D, 0);
+                int yMaxOffset = GetMaxOffsetOfClusterByLight(light, clusterIndex3D, 1);
+                int zMaxOffset = GetMaxOffsetOfClusterByLight(light, clusterIndex3D, 2);
+
+                for (int x = -xMaxOffset; x < xMaxOffset; ++x)
+                {
+                    for (int y = -yMaxOffset; y < yMaxOffset; ++y)
+                    {
+                        for (int z = -zMaxOffset; z < zMaxOffset; ++z)
+                        {
+                            var index3D = int3(clusterIndex3D.x + x, clusterIndex3D.y + y, clusterIndex3D.z + z);
+                            var index1D = MathUtils.ComputeClusterIndex1D(index3D, clustersCount3D);
+                            if (MathUtils.IsValidClusterIndex3D(index3D, clustersCount3D))
+                            {
+                                var frustum = frustums[index1D];
+                                if (PointLightInFrustum(ref frustum, ref light))
+                                {
+                                    AddLight(index1D, lightIndex);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            private int GetMaxOffsetOfClusterByLight(DataTypes.Light light, int3 lightCenterIndex3D, int dirIndex)
+            {
+                int3 clustersCount3D = int3(clustersCount.xyz);
+
+                if (!MathUtils.IsValidClusterIndex3D(lightCenterIndex3D, clustersCount3D))
+                {
+                    return 0;
+                }
+                
+                bool2 checkOverFlag = bool2(false, false);
+
+                int maxOffset = 1;
+                while (!(checkOverFlag.x & checkOverFlag.y))
+                {
+                    var index3D = lightCenterIndex3D;
+                    index3D[dirIndex] = index3D[dirIndex] + maxOffset;
+                    if (MathUtils.IsValidClusterIndex3D(index3D, clustersCount3D))
+                    {
+                        var index1D = MathUtils.ComputeClusterIndex1D(index3D, clustersCount3D);
+                        var frustum = frustums[index1D];
+                        checkOverFlag.x = !PointLightInFrustum(ref frustum, ref light);
+                    }
+                    else
+                    {
+                        checkOverFlag.x = true;
+                    }
+
+                    index3D = lightCenterIndex3D;
+                    index3D[dirIndex] = index3D[dirIndex] - maxOffset;
+                    if (MathUtils.IsValidClusterIndex3D(index3D, clustersCount3D))
+                    {
+                        var index1D = MathUtils.ComputeClusterIndex1D(index3D, clustersCount3D);
+                        var frustum = frustums[index1D];
+                        checkOverFlag.y = !PointLightInFrustum(ref frustum, ref light);
+                    }
+                    else
+                    {
+                        checkOverFlag.y = true;
+                    }
+
+                    ++maxOffset;
+                }
+
+                return --maxOffset;
+            }
+            
+            private bool PointLightInFrustum(ref DataTypes.Frustum frustum, ref DataTypes.Light light)
+            {
+                var sphere = new DataTypes.Sphere
+                {
+                    center = light.viewPos,
+                    radius = light.range
+                };
+                
+                return MathUtils.SphereInsideFrustum(ref sphere, ref frustum);
+            }
+
+            private void AddLight(int clusterIndex1D, int lightIndex)
+            {
+                lightIndexes.Add(clusterIndex1D, lightIndex);
+                frustumLightCount[clusterIndex1D] = ++frustumLightCount[clusterIndex1D];
+            }
+        }
+        
+        [BurstCompile(CompileSynchronously = true)]
         struct GenerateLightsCBDatasJob : IJob
         {
             public NativeArray<float4> lightBufferArray;
@@ -304,9 +449,9 @@ namespace MyRenderPipeline
             [ReadOnly]
             public NativeArray<DataTypes.Light> lights;
             [ReadOnly]
-            public NativeMultiHashMap<int, short> frustumLightIndexes;
+            public NativeMultiHashMap<int, int> clusterLightIndexes;
             [ReadOnly]
-            public NativeArray<int> frustumLightsCount;
+            public NativeArray<int> clusterLightsCount;
 
             public int lightDirOrPosBufferOffset;
             public int lightAttenBufferOffset;
@@ -339,9 +484,9 @@ namespace MyRenderPipeline
                     lightBufferArray[lightColorsBufferOffset + i] = float4(light.color.r, light.color.g, light.color.b, light.color.a);
                 }
 
-                for (int i = 0; i < frustumLightsCount.Length; ++i)
+                for (int i = 0; i < clusterLightsCount.Length; ++i)
                 {
-                    int lightCount = frustumLightsCount[i];
+                    int lightCount = clusterLightsCount[i];
                     int indexArrayIndex = CheckLightIndexArrayIndex(lightCount);
                     if (indexArrayIndex >= ShaderIdsAndConstants.MaxLightIndexListCount)
                     {
@@ -353,7 +498,7 @@ namespace MyRenderPipeline
                         clusterLightBufferArray[i] = int4(_currentLightIndexInArray, lightCount, indexArrayIndex, 0);
                     }
 
-                    var ite = frustumLightIndexes.GetValuesForKey(i);
+                    var ite = clusterLightIndexes.GetValuesForKey(i);
                     while (ite.MoveNext())
                     {
                         AddLightIndex(ite.Current);
@@ -457,8 +602,8 @@ namespace MyRenderPipeline
         public override void AfterRender(Camera camera, ScriptableRenderContext context, CullingResults cullingResults)
         {
             _jobHandle.Complete();
-
-            var lightsCullingJob = new LightsCullingParallelFor
+/*
+            var lightsCullingJob = new LightsCullingParallelForOld
             {
                 lights = _lights,
                 lightsCount = _lightsCount,
@@ -468,7 +613,24 @@ namespace MyRenderPipeline
                 maxLightsCountPerFrustum = _maxLightsCountPerCluster,
             };
             var lightsCullingJobHandle = lightsCullingJob.Schedule(_clustersCount, _jobBatchCount);
-
+*/
+            var lightsCullingJob = new LightsCullingJob
+            {
+                lights = _lights,
+                lightsCount = _lightsCount,
+                frustums = _viewClusters,
+                lightIndexes = _clusterLightIndexes,
+                frustumLightCount = _clusterLightsCount,
+                clustersCount = int4(_clustersCountX, _clustersCountY, _clustersCountZ, _clustersCount),
+                projMat = GL.GetGPUProjectionMatrix(camera.projectionMatrix, false),
+                cameraZNear = _cameraZNear,
+                gridSize = _gridSize,
+                screenDimension = _screenDimension,
+                startStep = _clusterZStartStep,
+                stepRatio = _clusterZStepRatio,
+            };
+            var lightsCullingJobHandle = lightsCullingJob.Schedule();
+            
             var generateCBJob = new GenerateLightsCBDatasJob
             {
                 lightBufferArray = _nativeLightBufferArray,
@@ -478,8 +640,8 @@ namespace MyRenderPipeline
                 indexListBuffer3Array = _nativeIndexListBuffer3Array,
                 indexListBuffer4Array = _nativeIndexListBuffer4Array,
                 lights = _lights,
-                frustumLightIndexes = _clusterLightIndexes,
-                frustumLightsCount = _clusterLightsCount,
+                clusterLightIndexes = _clusterLightIndexes,
+                clusterLightsCount = _clusterLightsCount,
 
                 lightDirOrPosBufferOffset = ShaderIdsAndConstants.PropOffset_LightDirectionsOrPositions,
                 lightAttenBufferOffset = ShaderIdsAndConstants.PropOffset_LightAttenuations,
@@ -621,7 +783,7 @@ namespace MyRenderPipeline
         private void InitJobNativeContainers()
         {
             _lights = new NativeArray<DataTypes.Light>(_maxLightsCount, Allocator.Persistent);
-            _clusterLightIndexes = new NativeMultiHashMap<int, short>(_clustersCount * _maxLightsCountPerCluster, Allocator.Persistent);
+            _clusterLightIndexes = new NativeMultiHashMap<int, int>(_clustersCount * _maxLightsCountPerCluster, Allocator.Persistent);
             _clusterLightsCount = new NativeArray<int>(_clustersCount, Allocator.Persistent);
         }
         
